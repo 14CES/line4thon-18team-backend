@@ -1,0 +1,65 @@
+HELP.md
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+### env / 비밀 정보 ###
+.env
+.env.*
+!.env.example
+application-local.yaml
+application-local.yml
+
+### 개인 데이터 (Takeout 원본) ###
+takeout/
+Takeout/
+*.zip
+
+### 업로드 파일 / 로그 ###
+uploads/
+logs/
+*.log
+
+### OS ###
+.DS_Store
+Thumbs.db
+desktop.ini
+
+### Python (gmaps-list 테스트용) ###
+.venv/
+venv/
+__pycache__/
+result.json
