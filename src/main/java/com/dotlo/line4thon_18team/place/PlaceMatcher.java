@@ -1,5 +1,7 @@
 package com.dotlo.line4thon_18team.place;
 
+import com.dotlo.line4thon_18team.global.error.BusinessException;
+import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,7 +72,7 @@ public class PlaceMatcher {
     // 여행 생성 시 1회. 못 찾으면 예외.
     public LatLng findCityLocation(String cityName) {
         List<Hit> hits = search(cityName, null, null, 0, 1);
-        if (hits.isEmpty()) throw new IllegalArgumentException("도시를 찾을 수 없음: " + cityName);
+        if (hits.isEmpty()) throw new BusinessException(ErrorCode.CITY_NOT_FOUND, "도시를 찾을 수 없습니다: " + cityName);
         Candidate c = hits.get(0).candidate();
         return new LatLng(c.lat(), c.lng());
     }
