@@ -20,3 +20,8 @@ spring:
     properties:
       hibernate:
         format_sql: true
+
+# Google Maps (BE2 장소·경로)
+google:
+  maps:
+    api-key: ${GOOGLE_MAPS_API_KEY:}
