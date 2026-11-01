@@ -1,0 +1,35 @@
+package com.dotlo.line4thon_18team.global.error;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+
+/**
+ * 서버에서 내려주는 모든 에러의 목록.
+ * 새 에러가 필요하면 자기 도메인 구역에 한 줄 추가하고 BusinessException 으로 던지면 된다.
+ */
+@Getter
+@RequiredArgsConstructor
+public enum ErrorCode {
+
+    // ===== 공통 =====
+    INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
+    INVALID_REQUEST_BODY(HttpStatus.BAD_REQUEST, "요청 본문(JSON) 형식이 올바르지 않습니다."),
+    FILE_REQUIRED(HttpStatus.BAD_REQUEST, "업로드할 파일이 없습니다. 'file' 이름으로 파일을 첨부해 주세요."),
+    RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 주소를 찾을 수 없습니다."),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 HTTP 메서드입니다."),
+    FILE_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "파일 크기가 너무 큽니다."),
+    UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 Content-Type 입니다. JSON 으로 보내 주세요."),
+    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
+
+    // ===== 계정 (BE1) =====
+
+    // ===== 여행 (BE1) =====
+
+    // ===== 장소 (BE1 / BE2) =====
+
+    // ===== 일정·AI (BE3) =====
+
+    private final HttpStatus status;
+    private final String message;
+}
