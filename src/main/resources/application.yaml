@@ -25,3 +25,18 @@ spring:
 google:
   maps:
     api-key: ${GOOGLE_MAPS_API_KEY:}
+  # Google 로그인 (BE1)
+  oauth:
+    client-id: ${GOOGLE_CLIENT_ID:}
+    client-secret: ${GOOGLE_CLIENT_SECRET:}
+    redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/login/oauth2/code/google}
+
+# JWT (BE1 로그인)
+jwt:
+  secret: ${JWT_SECRET:}
+  access-token-validity-minutes: 30
+  refresh-token-validity-days: 14
+
+# 로컬 개발용: 토큰 없이 X-User-Id 헤더로 사용자 구분 (배포 서버에는 값이 없어서 자동으로 false)
+auth:
+  dev-header-enabled: ${AUTH_DEV_HEADER_ENABLED:false}
