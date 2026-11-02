@@ -4,12 +4,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import com.dotlo.line4thon_18team.auth.jwt.JwtProvider;
+import com.dotlo.line4thon_18team.global.config.SecurityConfig;
+import org.springframework.context.annotation.Import;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(CityController.class)
+@Import({SecurityConfig.class, JwtProvider.class})
 class CityControllerTest {
 
     @Autowired MockMvc mvc;
