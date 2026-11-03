@@ -9,6 +9,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
@@ -82,6 +83,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResource(NoResourceFoundException e) {
         return toResponse(ErrorCode.RESOURCE_NOT_FOUND, ErrorCode.RESOURCE_NOT_FOUND.getMessage());
+    }
+
+    // 구글 등 외부 API 호출 실패 (오류 응답, 타임아웃) -> 502
+    @ExceptionHandler(RestClientException.class)
+    public ResponseEntity<ErrorResponse> handleExternalApi(RestClientException e) {
+        log.error("외부 API 호출 실패", e);
+        return toResponse(ErrorCode.EXTERNAL_API_ERROR, ErrorCode.EXTERNAL_API_ERROR.getMessage());
     }
 
     // 위에서 못 잡은 나머지 -> 500. 원인 파악을 위해 로그는 꼭 남긴다.
