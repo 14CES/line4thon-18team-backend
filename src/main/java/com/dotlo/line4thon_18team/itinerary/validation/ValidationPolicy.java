@@ -19,7 +19,7 @@ import java.util.Objects;
  *   <li>체류시간: 장소 유형별 기본값 × 강도 배율(1.2 / 1.0 / 0.85), 5분 단위 반올림</li>
  *   <li>도보 기준 직선거리: 덜 걷기 600m / 보통 1,000m / 많이 1,600m (넘으면 대중교통)</li>
  *   <li>공항: 입국 60분, 숙소 짐 정리 30분, 출국 120분 전 공항 도착, 짐 찾기 30분, 이동 기본 60분</li>
- *   <li>추정: 우회 계수 1.3, 도보 분당 75m, 대중교통 분당 333m(약 20km/h) + 대기 10분</li>
+ *   <li>추정: 우회 계수 1.3, 도보 분당 80m, 대중교통 분당 300m + 대기 10분 (BE2 place.TravelTime과 같은 값)</li>
  * </ul>
  */
 public final class ValidationPolicy {
@@ -166,8 +166,8 @@ public final class ValidationPolicy {
         private int unknownLegMinutes = 30;
         private int sameSpotMeters = 50;
         private double detourFactor = 1.3;
-        private double walkMetersPerMinute = 75;
-        private double transitMetersPerMinute = 333;
+        private double walkMetersPerMinute = 80;
+        private double transitMetersPerMinute = 300;
         private int transitOverheadMinutes = 10;
 
         private Builder() {

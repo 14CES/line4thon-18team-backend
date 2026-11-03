@@ -233,6 +233,38 @@ class ItineraryValidatorTest {
     }
 
     @Test
+    void 이동시간_함수가_고른_수단을_따른다() {
+        // 800m라 도보로 묻지만 이동시간 함수(BE2)가 대중교통으로 답한 경우
+        FakeTravelTimeProvider provider = FakeTravelTimeProvider.fixedMinutes(15)
+                .override(HOTEL_NAMBA, PARK_800M.location(), TravelLookup.ok(12, 1040, TravelMode.TRANSIT));
+
+        ValidationResult result = validate(provider, day(DAY2, visit("p1", PARK_800M)));
+
+        assertThat(provider.queries().get(0).mode()).isEqualTo(TravelMode.WALK);
+        ScheduledVisit park = result.days().get(0).visits().get(0);
+        assertThat(park.travel().mode()).isEqualTo(TravelMode.TRANSIT);
+        assertThat(park.travel().minutes()).isEqualTo(12);
+        assertThat(park.travel().source()).isEqualTo(LegSource.ROUTES_API);
+        assertThat(result.issuesOf(IssueCode.TRAVEL_ESTIMATED)).isEmpty();
+    }
+
+    @Test
+    void 이동시간_함수가_추정치를_주면_그_값을_쓰고_추정으로_표시한다() {
+        FakeTravelTimeProvider provider = FakeTravelTimeProvider.fixedMinutes(15)
+                .override(HOTEL_NAMBA, OSAKA_CASTLE.location(), TravelLookup.estimated(32, 4200, TravelMode.TRANSIT));
+
+        ValidationResult result = validate(provider, day(DAY2, visit("c1", OSAKA_CASTLE)));
+
+        ScheduledVisit castle = result.days().get(0).visits().get(0);
+        assertThat(castle.travel().minutes()).isEqualTo(32);
+        assertThat(castle.travel().source()).isEqualTo(LegSource.ESTIMATED);
+        assertThat(castle.travel().isEstimated()).isTrue();
+        ValidationIssue issue = single(result, IssueCode.TRAVEL_ESTIMATED);
+        assertThat(issue.severity()).isEqualTo(Severity.WARNING);
+        assertThat(issue.params()).containsEntry("mode", "TRANSIT").containsEntry("estimatedMinutes", 32);
+    }
+
+    @Test
     void 정보가_없는_장소는_미확인으로_표시하고_계속_계산한다() {
         ValidationResult result = validate(travel, day(DAY2,
                 visit("s1", SHRINE_NO_HOURS), VisitDraft.of("x1", "p-unknown"), visit("r1", RESTAURANT_NO_LOCATION)));
