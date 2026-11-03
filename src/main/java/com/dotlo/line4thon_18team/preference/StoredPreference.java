@@ -7,7 +7,7 @@ import java.util.Objects;
 
 /**
  * 저장된 취향 한 건. 여행 + 사용자 단위로 저장한다 (동행자 기능에서 구성원별 취향이 필요해서).
- * 실제 테이블 구조는 BE1 공통 데이터 모델에 맞춰 바꾼다.
+ * DB에는 PreferenceEntity(trip_preferences 테이블)로 저장한다.
  */
 public record StoredPreference(long tripId, long userId, PreferenceProfile profile, String rawText, Instant updatedAt) {
 
