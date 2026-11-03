@@ -11,7 +11,7 @@ import java.time.Clock;
 /**
  * 취향 기능 빈 등록 (BE3).
  *
- * <p>저장소는 DB 구조가 정해지기 전까지 메모리 구현을 쓴다. JPA로 바꿀 때는 PreferenceRepository 빈만 교체하면 된다.
+ * <p>저장소는 DB(JPA)를 쓴다. 메모리 구현(InMemoryPreferenceRepository)은 단위 테스트에서만 쓴다.
  */
 @Configuration
 public class PreferenceConfig {
@@ -22,8 +22,8 @@ public class PreferenceConfig {
     }
 
     @Bean
-    public PreferenceRepository preferenceRepository() {
-        return new InMemoryPreferenceRepository();
+    public PreferenceRepository preferenceRepository(PreferenceEntityRepository preferenceEntityRepository) {
+        return new JpaPreferenceRepository(preferenceEntityRepository);
     }
 
     @Bean

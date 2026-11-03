@@ -4,8 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 취향 저장소. 지금은 메모리 구현만 있다.
- * BE1 DB 구조가 정해지면 JPA 등으로 이 인터페이스를 구현하면 된다.
+ * 취향 저장소. 서버에서는 JpaPreferenceRepository(DB), 단위 테스트에서는 InMemoryPreferenceRepository를 쓴다.
  */
 public interface PreferenceRepository {
 
