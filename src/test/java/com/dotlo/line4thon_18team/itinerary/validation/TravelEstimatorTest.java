@@ -21,10 +21,10 @@ class TravelEstimatorTest {
 
     @Test
     void 도보와_대중교통_시간을_추정한다() {
-        // 800m × 1.3 ÷ 75m/분 = 13.9 → 14분
-        assertThat(estimator.estimateMinutes(800, TravelMode.WALK)).isEqualTo(14);
-        // 10분 + 3,320m × 1.3 ÷ 333m/분 = 22.96 → 23분
-        assertThat(estimator.estimateMinutes(3320, TravelMode.TRANSIT)).isEqualTo(23);
+        // 800m × 1.3 ÷ 80m/분 = 13.0 → 13분
+        assertThat(estimator.estimateMinutes(800, TravelMode.WALK)).isEqualTo(13);
+        // 10분 + 3,320m × 1.3 ÷ 300m/분 = 24.39 → 25분
+        assertThat(estimator.estimateMinutes(3320, TravelMode.TRANSIT)).isEqualTo(25);
         assertThat(estimator.estimateMinutes(0, TravelMode.WALK)).isEqualTo(1);
         assertThat(estimator.estimateDistanceMeters(1000)).isEqualTo(1300);
     }

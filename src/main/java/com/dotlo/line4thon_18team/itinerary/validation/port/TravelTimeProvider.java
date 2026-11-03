@@ -1,7 +1,9 @@
 package com.dotlo.line4thon_18team.itinerary.validation.port;
 
 /**
- * BE2에게 받을 이동시간 함수 (Routes API).
+ * 이동시간 함수 (Routes API). 서버에서는 PlaceTravelTimeProvider가 BE2 place.TravelTime을 연결한다.
+ *
+ * <p>수단을 직접 고르는 함수는 {@link TravelLookup#mode()}에 실제 수단을, 추정치는 {@link TravelLookup#estimated()}로 알려준다.
  *
  * <p>합의할 점:
  * <ul>
