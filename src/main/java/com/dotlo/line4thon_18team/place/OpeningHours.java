@@ -48,7 +48,7 @@ public class OpeningHours {
     private static final String DETAILS_URL = "https://places.googleapis.com/v1/places/{placeId}";
 
     private final String apiKey;
-    private final RestClient rest = RestClient.create();
+    private final RestClient rest = GoogleClient.create();
 
     public OpeningHours(@Value("${google.maps.api-key}") String apiKey) {
         this.apiKey = apiKey;

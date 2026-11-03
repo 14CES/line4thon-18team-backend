@@ -58,7 +58,7 @@ public class PlaceMatcher {
     private static final Pattern CID_PARAM = Pattern.compile("[?&]cid=(\\d+)");
 
     private final String apiKey;
-    private final RestClient rest = RestClient.create();
+    private final RestClient rest = GoogleClient.create();
 
     public PlaceMatcher(@Value("${google.maps.api-key}") String apiKey) {
         this.apiKey = apiKey;
