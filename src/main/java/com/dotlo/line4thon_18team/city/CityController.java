@@ -1,6 +1,7 @@
 package com.dotlo.line4thon_18team.city;
 
 import java.util.List;
+import java.util.Optional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -25,5 +26,9 @@ public class CityController {
     @GetMapping("/api/cities")
     public List<City> cities() {
         return CITIES;
+    }
+
+    public static Optional<City> findByName(String name) {
+        return CITIES.stream().filter(c -> c.name().equals(name)).findFirst();
     }
 }
