@@ -5,6 +5,7 @@ import com.dotlo.line4thon_18team.preference.InterpretationResult;
 import com.dotlo.line4thon_18team.preference.PreferenceInput;
 import com.dotlo.line4thon_18team.preference.PreferenceService;
 import com.dotlo.line4thon_18team.preference.PreferenceView;
+import com.dotlo.line4thon_18team.trip.service.TripService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,16 +18,20 @@ import org.springframework.web.bind.annotation.RestController;
  * 취향 API (API 명세서 '취향' 파트, BE3). 모두 로그인이 필요하다 ({@link LoginUser}).
  *
  * <p>로컬에서는 AUTH_DEV_HEADER_ENABLED=true 일 때 토큰 대신 X-User-Id 헤더로도 호출할 수 있다.
- * TODO 여행 구성원인지 권한 확인은 여행 API(BE1)가 생기면 추가한다.
+ *
+ * <p>취향은 여행에 붙는 정보라서 모든 API가 먼저 내 여행인지 확인한다 (남의 여행이면 404).
+ * 동행자 기능이 들어오면 소유자가 아니라 구성원인지 확인하는 쪽으로 바꾼다.
  */
 @RestController
 @RequestMapping("/api/trips/{tripId}/preferences")
 public class PreferenceController {
 
     private final PreferenceService preferenceService;
+    private final TripService tripService;
 
-    public PreferenceController(PreferenceService preferenceService) {
+    public PreferenceController(PreferenceService preferenceService, TripService tripService) {
         this.preferenceService = preferenceService;
+        this.tripService = tripService;
     }
 
     /** 텍스트 취향 AI 해석. 해석 결과를 칩으로 반환하고 저장하지 않는다. */
@@ -34,6 +39,7 @@ public class PreferenceController {
     public InterpretationResult analyze(@PathVariable("tripId") long tripId,
                                         @LoginUser Long userId,
                                         @RequestBody InterpretRequest request) {
+        tripService.findOwnedTrip(userId, tripId);
         return preferenceService.interpret(tripId, userId, request.text());
     }
 
@@ -42,6 +48,7 @@ public class PreferenceController {
     public PreferenceView save(@PathVariable("tripId") long tripId,
                                @LoginUser Long userId,
                                @RequestBody PreferenceInput input) {
+        tripService.findOwnedTrip(userId, tripId);
         return preferenceService.save(tripId, userId, input);
     }
 
@@ -49,6 +56,7 @@ public class PreferenceController {
     @GetMapping
     public PreferenceView get(@PathVariable("tripId") long tripId,
                               @LoginUser Long userId) {
+        tripService.findOwnedTrip(userId, tripId);
         return preferenceService.get(tripId, userId);
     }
 }
