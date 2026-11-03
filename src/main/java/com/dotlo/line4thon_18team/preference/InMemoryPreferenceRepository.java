@@ -6,7 +6,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-/** 메모리 저장소 (DB 합의 전 임시). 서버를 재시작하면 사라진다. */
+/** 메모리 저장소. 단위 테스트용 (서버는 JpaPreferenceRepository를 쓴다). */
 public class InMemoryPreferenceRepository implements PreferenceRepository {
 
     private record Key(long tripId, long userId) {
