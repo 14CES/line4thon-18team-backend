@@ -50,6 +50,8 @@ cp .env.example .env
 | DB_PASSWORD | DB 비밀번호 | (직접 정하기) |
 | DB_ROOT_PASSWORD | MySQL 관리자 비밀번호 | (직접 정하기) |
 | GOOGLE_MAPS_API_KEY | Google Places·Routes API 키 (BE2) | (팀원에게 따로 받기) |
+| OPENAI_API_KEY | OpenAI API 키 (비워 두면 AI 취향 해석은 기본값으로 진행) | sk-... |
+| OPENAI_MODEL | 사용할 OpenAI 모델 | gpt-5-mini |
 
 ### 3. MySQL 실행
 ```bash
