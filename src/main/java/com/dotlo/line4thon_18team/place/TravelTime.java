@@ -39,7 +39,7 @@ public class TravelTime {
     private static final int TRANSIT_EXTRA_MIN = 10;  // 자동차 시간 → 대중교통 추정: 역까지 걷기, 기다리기
 
     private final String apiKey;
-    private final RestClient rest = RestClient.create();
+    private final RestClient rest = GoogleClient.create();
 
     public TravelTime(@Value("${google.maps.api-key}") String apiKey) {
         this.apiKey = apiKey;
