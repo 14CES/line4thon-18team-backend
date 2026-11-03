@@ -40,3 +40,17 @@ jwt:
 # 로컬 개발용: 토큰 없이 X-User-Id 헤더로 사용자 구분 (배포 서버에는 값이 없어서 자동으로 false)
 auth:
   dev-header-enabled: ${AUTH_DEV_HEADER_ENABLED:false}
+
+# ===== AI (BE3) =====
+# OpenAI 키는 .env 의 OPENAI_API_KEY 로 넣는다. CI 에는 키가 없으므로 기본값은 빈 값이고,
+# 서버가 시작할 때는 OpenAI 를 호출하지 않는다. (키가 없으면 취향 해석은 기본값으로 진행)
+dotlo:
+  llm:
+    max-attempts: 3
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+      model: ${OPENAI_MODEL:gpt-5-mini}
+      reasoning-effort: ${OPENAI_REASONING_EFFORT:}
+      connect-timeout: 5s
+      request-timeout: 60s

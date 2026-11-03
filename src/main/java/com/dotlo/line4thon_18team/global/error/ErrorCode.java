@@ -39,6 +39,8 @@ public enum ErrorCode {
     CITY_NOT_FOUND(HttpStatus.NOT_FOUND, "도시를 찾을 수 없습니다."),
 
     // ===== 일정·AI (BE3) =====
+    PREFERENCE_TEXT_TOO_LONG(HttpStatus.BAD_REQUEST, "취향은 500자 이하로 입력해 주세요."),
+    INVALID_PREFERENCE(HttpStatus.BAD_REQUEST, "취향 값이 올바르지 않습니다."),
 
     ; // 에러 추가는 이 위에 (각 줄은 쉼표로 끝내기)
 

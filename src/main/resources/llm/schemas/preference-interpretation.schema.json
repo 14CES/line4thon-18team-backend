@@ -1,0 +1,46 @@
+{
+  "type": "object",
+  "description": "사용자가 텍스트로 쓴 여행 취향을 정해진 값으로 분류한 결과",
+  "additionalProperties": false,
+  "required": ["pace", "walking", "dayStart", "interests", "avoid", "notes"],
+  "properties": {
+    "pace": {
+      "type": "string",
+      "description": "일정 강도. 언급이 없으면 UNSPECIFIED",
+      "enum": ["UNSPECIFIED", "RELAXED", "NORMAL", "PACKED"]
+    },
+    "walking": {
+      "type": "string",
+      "description": "걷기 선호. 언급이 없으면 UNSPECIFIED",
+      "enum": ["UNSPECIFIED", "LESS", "NORMAL", "MORE"]
+    },
+    "dayStart": {
+      "type": "string",
+      "description": "하루 시작 시각 선호. 언급이 없으면 UNSPECIFIED",
+      "enum": ["UNSPECIFIED", "EARLY", "NORMAL", "LATE"]
+    },
+    "interests": {
+      "type": "array",
+      "description": "가고 싶은 장소 유형",
+      "items": {
+        "type": "string",
+        "enum": ["FOOD", "CAFE", "SIGHTSEEING", "SHOPPING", "NATURE", "CULTURE", "NIGHTLIFE", "ACTIVITY"]
+      }
+    },
+    "avoid": {
+      "type": "array",
+      "description": "빼고 싶은 장소 유형. interests와 겹치면 안 됨",
+      "items": {
+        "type": "string",
+        "enum": ["FOOD", "CAFE", "SIGHTSEEING", "SHOPPING", "NATURE", "CULTURE", "NIGHTLIFE", "ACTIVITY"]
+      }
+    },
+    "notes": {
+      "type": "array",
+      "description": "칩으로 표현할 수 없는 중요한 조건. 짧은 한국어 문장, 최대 5개",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
