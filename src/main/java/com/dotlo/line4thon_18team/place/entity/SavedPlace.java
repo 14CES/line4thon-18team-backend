@@ -1,6 +1,7 @@
 package com.dotlo.line4thon_18team.place.entity;
 
 import com.dotlo.line4thon_18team.global.entity.BaseTimeEntity;
+import com.dotlo.line4thon_18team.place.PlaceCategory;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -68,6 +69,11 @@ public class SavedPlace extends BaseTimeEntity {
     private Double latitude;
 
     private Double longitude;
+
+    // 장소 유형 (일정 검증의 체류시간, 취향의 관심·제외 유형에 사용)
+    @Enumerated(EnumType.STRING)
+    @Column(columnDefinition = "varchar(20)")
+    private PlaceCategory category;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, columnDefinition = "varchar(20)")

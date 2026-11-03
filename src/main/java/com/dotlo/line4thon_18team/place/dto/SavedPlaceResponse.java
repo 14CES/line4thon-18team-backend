@@ -1,5 +1,6 @@
 package com.dotlo.line4thon_18team.place.dto;
 
+import com.dotlo.line4thon_18team.place.PlaceCategory;
 import com.dotlo.line4thon_18team.place.entity.PlaceMatchStatus;
 import com.dotlo.line4thon_18team.place.entity.PlaceSource;
 import com.dotlo.line4thon_18team.place.entity.SavedPlace;
@@ -19,6 +20,7 @@ public record SavedPlaceResponse(
         String address,
         Double latitude,
         Double longitude,
+        PlaceCategory category,
         PlaceMatchStatus matchStatus
 ) {
 
@@ -35,6 +37,7 @@ public record SavedPlaceResponse(
                 place.getAddress(),
                 place.getLatitude(),
                 place.getLongitude(),
+                place.getCategory(),
                 place.getMatchStatus()
         );
     }
