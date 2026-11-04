@@ -7,6 +7,7 @@ import com.dotlo.line4thon_18team.place.service.SavedPlaceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,5 +34,13 @@ public class SavedPlaceController {
     public ResponseEntity<TakeoutUploadResponse> uploadTakeout(@LoginUser Long userId, @PathVariable Long tripId,
                                                                @RequestPart("file") MultipartFile file) {
         return ResponseEntity.ok(savedPlaceService.uploadTakeout(userId, tripId, file));
+    }
+
+    // 저장 장소 삭제 → 204 No Content
+    @DeleteMapping("/{placeId}")
+    public ResponseEntity<Void> deletePlace(@LoginUser Long userId, @PathVariable Long tripId,
+                                            @PathVariable Long placeId) {
+        savedPlaceService.deletePlace(userId, tripId, placeId);
+        return ResponseEntity.noContent().build();
     }
 }

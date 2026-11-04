@@ -44,6 +44,7 @@ public enum ErrorCode {
     INVALID_ZIP_FILE(HttpStatus.BAD_REQUEST, "zip 파일을 열 수 없습니다."),
     NO_CSV_IN_ZIP(HttpStatus.BAD_REQUEST, "zip 안에 Takeout 저장 목록 CSV가 없습니다."),
     NO_SAVED_PLACES(HttpStatus.BAD_REQUEST, "파일에서 저장된 장소를 찾지 못했습니다."),
+    SAVED_PLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "저장 장소를 찾을 수 없습니다."),
 
     // ===== 일정·AI (BE3) =====
     PREFERENCE_TEXT_TOO_LONG(HttpStatus.BAD_REQUEST, "취향은 500자 이하로 입력해 주세요."),

@@ -1,5 +1,7 @@
 package com.dotlo.line4thon_18team.place.service;
 
+import com.dotlo.line4thon_18team.global.error.BusinessException;
+import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.place.dto.SavedPlaceListResponse;
 import com.dotlo.line4thon_18team.place.dto.SavedPlaceResponse;
 import com.dotlo.line4thon_18team.place.dto.TakeoutUploadResponse;
@@ -81,5 +83,15 @@ public class SavedPlaceService {
                     newCount, list.places().size() - newCount, list.skippedRows()));
         }
         return new TakeoutUploadResponse(tripId, totalNewCount, results);
+    }
+
+    @Transactional
+    public void deletePlace(Long userId, Long tripId, Long placeId) {
+        tripService.findOwnedTrip(userId, tripId);   // 없는 여행·남의 여행이면 404
+
+        SavedPlace place = savedPlaceRepository.findById(placeId)
+                .filter(p -> p.getTrip().getId().equals(tripId))   // 다른 여행의 장소면 없는 것으로 본다
+                .orElseThrow(() -> new BusinessException(ErrorCode.SAVED_PLACE_NOT_FOUND));
+        savedPlaceRepository.delete(place);
     }
 }
