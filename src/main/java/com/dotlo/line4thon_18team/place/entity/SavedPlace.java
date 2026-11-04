@@ -78,4 +78,26 @@ public class SavedPlace extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, columnDefinition = "varchar(20)")
     private PlaceMatchStatus matchStatus;
+
+    // Takeout 에서 읽은 장소. featureId 가 없는 핀은 URL 의 좌표를 미리 넣어둔다 (매칭 전이라 PENDING)
+    public static SavedPlace fromTakeout(Trip trip, String featureId, String name, String note, String googleUrl,
+                                         Double latitude, Double longitude, String listName) {
+        SavedPlace place = new SavedPlace();
+        place.trip = trip;
+        place.featureId = featureId;
+        place.name = name;
+        place.note = note;
+        place.googleUrl = googleUrl;
+        place.latitude = latitude;
+        place.longitude = longitude;
+        place.source = PlaceSource.TAKEOUT;
+        place.matchStatus = PlaceMatchStatus.PENDING;
+        place.listNames.add(listName);
+        return place;
+    }
+
+    // 이미 있던 장소가 다른 리스트에도 있으면 리스트 이름만 추가
+    public void addListName(String listName) {
+        listNames.add(listName);
+    }
 }
