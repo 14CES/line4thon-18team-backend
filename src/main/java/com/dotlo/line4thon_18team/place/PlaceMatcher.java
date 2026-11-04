@@ -82,7 +82,7 @@ public class PlaceMatcher {
     public List<Candidate> searchNear(String query, double lat, double lng, int radius) {
         return search(query, lat, lng, radius, 10).stream()
                 .map(Hit::candidate)
-                .filter(c -> meters(lat, lng, c.lat(), c.lng()) <= radius)  // 검색 범위는 필터가 아니라서 직접 거름
+                .filter(c -> meters(lat, lng, c.lat(), c.lng()) <= radius)  // 검색 범위가 사각형이라 모서리 부분은 직접 거름
                 .toList();
     }
 
@@ -127,9 +127,13 @@ public class PlaceMatcher {
         body.put("languageCode", "ko");
         body.put("pageSize", size);
         if (lat != null) {
-            body.put("locationBias", Map.of("circle", Map.of(
-                    "center", Map.of("latitude", lat, "longitude", lng),
-                    "radius", radius)));
+            // bias(우선)가 아니라 restriction(제한). bias면 "그레이스리 호텔"을 오사카에서 찾아도 서울 지점만 나옴 (2026-11-03 확인)
+            // restriction은 사각형만 지원해서 반경을 감싸는 사각형으로 보냄
+            double dLat = radius / 111_320.0;
+            double dLng = radius / (111_320.0 * Math.cos(Math.toRadians(lat)));
+            body.put("locationRestriction", Map.of("rectangle", Map.of(
+                    "low", Map.of("latitude", lat - dLat, "longitude", lng - dLng),
+                    "high", Map.of("latitude", lat + dLat, "longitude", lng + dLng))));
         }
         SearchResponse res = rest.post().uri(SEARCH_URL)
                 .contentType(MediaType.APPLICATION_JSON)

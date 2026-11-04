@@ -7,6 +7,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.RestClientException;
@@ -49,6 +50,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
         return toResponse(ErrorCode.INVALID_INPUT, e.getName() + " 값이 올바르지 않습니다.");
+    }
+
+    // 필수 쿼리 파라미터가 빠진 경우 (/api/places/search 에 query 없음 등)
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingParam(MissingServletRequestParameterException e) {
+        return toResponse(ErrorCode.INVALID_INPUT, e.getParameterName() + " 값이 필요합니다.");
     }
 
     // multipart 요청에 'file' 이 빠진 경우
