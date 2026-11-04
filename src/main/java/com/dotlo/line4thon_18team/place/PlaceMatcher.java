@@ -27,8 +27,10 @@ public class PlaceMatcher {
     /*
     - place: 확정된 장소. MATCHED일 때만 값이 있고 나머지는 null입니다.
     - candidates: NEEDS_REVIEW일 때 사용자에게 보여 줄 후보 목록. 나머지는 빈 리스트입니다.
+    - category, closed: place의 장소 유형, 폐업 여부. MATCHED일 때만 값이 있습니다.
     */
-    public record MatchResult(Long id, MatchStatus status, Candidate place, List<Candidate> candidates) {}
+    public record MatchResult(Long id, MatchStatus status, Candidate place, List<Candidate> candidates,
+                              PlaceCategory category, boolean closed) {}
 
     public record Candidate(String placeId, String name, String address, double lat, double lng) {}
 
@@ -40,18 +42,20 @@ public class PlaceMatcher {
 
     public record LatLng(double lat, double lng) {}
 
-    // 후보 + 비교용 CID (CID는 출력에 안 나감)
-    private record Hit(Candidate candidate, String cid) {}
+    // 후보 + 비교용 CID, 유형, 폐업 여부 (후보 목록에는 안 나감)
+    private record Hit(Candidate candidate, String cid, PlaceCategory category, boolean closed) {}
 
     // Places API 응답 중 필요한 필드만
     record SearchResponse(List<Place> places) {}
-    record Place(String id, Text displayName, String formattedAddress, Location location, String googleMapsUri) {}
+    record Place(String id, Text displayName, String formattedAddress, Location location, String googleMapsUri,
+                 String primaryType, List<String> types, String businessStatus) {}
     record Text(String text) {}
     record Location(double latitude, double longitude) {}
 
     private static final String SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
     private static final String FIELD_MASK =
-            "places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri";
+            "places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri,"
+                    + "places.primaryType,places.types,places.businessStatus";  // 전부 Text Search Pro 요금
     private static final int CITY_RADIUS_M = 15000;
     private static final int PLACE_RADIUS_M = 200;
     private static final int MAX_DIST_M = 50;
@@ -93,25 +97,27 @@ public class PlaceMatcher {
         List<Hit> hits = hasCoord
                 ? search(p.name(), p.lat(), p.lng(), PLACE_RADIUS_M, 10, false)
                 : search(p.name(), cityLat, cityLng, CITY_RADIUS_M, 10, false);
-        if (hits.isEmpty()) return new MatchResult(p.id(), MatchStatus.NOT_FOUND, null, List.of());
+        if (hits.isEmpty()) return new MatchResult(p.id(), MatchStatus.NOT_FOUND, null, List.of(), null, false);
 
         // 1) CID 일치
         String cid = cidOf(p.featureId());
         if (cid != null) {
             for (Hit h : hits) {
-                if (cid.equals(h.cid())) return matched(p, h.candidate());
+                if (cid.equals(h.cid())) return matched(p, h);
             }
         }
         // 2) 좌표 있으면 1위가 50m 이내인지
-        Candidate top = hits.get(0).candidate();
-        if (hasCoord && meters(p.lat(), p.lng(), top.lat(), top.lng()) <= MAX_DIST_M) return matched(p, top);
+        Hit top = hits.get(0);
+        if (hasCoord && meters(p.lat(), p.lng(), top.candidate().lat(), top.candidate().lng()) <= MAX_DIST_M) {
+            return matched(p, top);
+        }
 
         return new MatchResult(p.id(), MatchStatus.NEEDS_REVIEW, null,
-                hits.stream().map(Hit::candidate).toList());
+                hits.stream().map(Hit::candidate).toList(), null, false);
     }
 
-    private static MatchResult matched(PlaceInput p, Candidate c) {
-        return new MatchResult(p.id(), MatchStatus.MATCHED, c, List.of());
+    private static MatchResult matched(PlaceInput p, Hit h) {
+        return new MatchResult(p.id(), MatchStatus.MATCHED, h.candidate(), List.of(), h.category(), h.closed());
     }
 
     // "0x6000e691ef37d6b7:0xb291250c3595327a" → "12867106344743023226" (long 범위를 넘어서 unsigned로 처리)
@@ -154,11 +160,13 @@ public class PlaceMatcher {
             Matcher m = CID_PARAM.matcher(pl.googleMapsUri() == null ? "" : pl.googleMapsUri());
             return new Hit(new Candidate(pl.id(), pl.displayName().text(), pl.formattedAddress(),
                     pl.location().latitude(), pl.location().longitude()),
-                    m.find() ? m.group(1) : null);
+                    m.find() ? m.group(1) : null,
+                    PlaceCategoryMapper.of(pl.primaryType(), pl.types()),
+                    "CLOSED_PERMANENTLY".equals(pl.businessStatus()));
         }).toList();
     }
 
-    static double meters(double lat1, double lng1, double lat2, double lng2) {
+    public static double meters(double lat1, double lng1, double lat2, double lng2) {
         double r1 = Math.toRadians(lat1), r2 = Math.toRadians(lat2);
         double h = Math.pow(Math.sin(Math.toRadians(lat2 - lat1) / 2), 2)
                 + Math.cos(r1) * Math.cos(r2) * Math.pow(Math.sin(Math.toRadians(lng2 - lng1) / 2), 2);
