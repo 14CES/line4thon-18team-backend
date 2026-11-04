@@ -44,8 +44,8 @@ application-local.yaml
 application-local.yml
 
 ### 개인 데이터 (Takeout 원본) ###
-takeout/
-Takeout/
+/takeout/
+/Takeout/
 *.zip
 
 ### 업로드 파일 / 로그 ###
