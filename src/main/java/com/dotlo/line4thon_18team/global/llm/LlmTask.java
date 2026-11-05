@@ -39,4 +39,12 @@ public interface LlmTask<I, O> {
     default List<String> validate(O output) {
         return List.of();
     }
+
+    /**
+     * 입력과 견줘야 하는 규칙 검사 (예: 입력에 없는 항목을 만들어 내지 않았는지).
+     * 기본은 입력을 보지 않는 {@link #validate(Object)}를 쓴다.
+     */
+    default List<String> validate(I input, O output) {
+        return validate(output);
+    }
 }
