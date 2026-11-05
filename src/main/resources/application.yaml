@@ -21,6 +21,12 @@ spring:
       hibernate:
         format_sql: true
 
+  # 파일 업로드 용량 (기본 1MB라 Takeout zip이 막힘)
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+
 # Google Maps (BE2 장소·경로)
 google:
   maps:

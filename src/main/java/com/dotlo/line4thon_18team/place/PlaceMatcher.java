@@ -71,7 +71,7 @@ public class PlaceMatcher {
 
     // 여행 생성 시 1회. 못 찾으면 예외.
     public LatLng findCityLocation(String cityName) {
-        List<Hit> hits = search(cityName, null, null, 0, 1);
+        List<Hit> hits = search(cityName, null, null, 0, 1, false);
         if (hits.isEmpty()) throw new BusinessException(ErrorCode.CITY_NOT_FOUND, "도시를 찾을 수 없습니다: " + cityName);
         Candidate c = hits.get(0).candidate();
         return new LatLng(c.lat(), c.lng());
@@ -80,18 +80,19 @@ public class PlaceMatcher {
     // 장소 검색 (장소 직접 추가, BE3 AI 장소 추가). 중심에서 radius 미터 안의 결과만, 최대 10개.
     // 결과가 없으면 빈 리스트 → 호출하는 쪽에서 radius를 넓혀 다시 검색.
     public List<Candidate> searchNear(String query, double lat, double lng, int radius) {
-        return search(query, lat, lng, radius, 10).stream()
+        return search(query, lat, lng, radius, 10, true).stream()
                 .map(Hit::candidate)
-                .filter(c -> meters(lat, lng, c.lat(), c.lng()) <= radius)  // 검색 범위는 필터가 아니라서 직접 거름
+                .filter(c -> meters(lat, lng, c.lat(), c.lng()) <= radius)  // 검색 범위가 사각형이라 모서리 부분은 직접 거름
                 .toList();
     }
 
     private MatchResult match(PlaceInput p, double cityLat, double cityLng) {
         boolean hasCoord = p.lat() != null && p.lng() != null;
         // 좌표 있으면 그 자리 200m, 없으면 도시 중심 15km
+        // 우선(bias)만 걸어서 도시 밖 장소도 찾음. 제한(restriction)이면 교토 기요미즈데라가 오사카 덴노지 기요미즈데라로 바뀜 (2026-11-04 확인)
         List<Hit> hits = hasCoord
-                ? search(p.name(), p.lat(), p.lng(), PLACE_RADIUS_M, 10)
-                : search(p.name(), cityLat, cityLng, CITY_RADIUS_M, 10);
+                ? search(p.name(), p.lat(), p.lng(), PLACE_RADIUS_M, 10, false)
+                : search(p.name(), cityLat, cityLng, CITY_RADIUS_M, 10, false);
         if (hits.isEmpty()) return new MatchResult(p.id(), MatchStatus.NOT_FOUND, null, List.of());
 
         // 1) CID 일치
@@ -121,15 +122,24 @@ public class PlaceMatcher {
         return Long.toUnsignedString(Long.parseUnsignedLong(featureId.substring(i + 3), 16));
     }
 
-    private List<Hit> search(String query, Double lat, Double lng, int radius, int size) {
+    // restrict: true면 범위 밖 결과를 뺌(검색 API), false면 범위 안을 우선만 함(매칭)
+    private List<Hit> search(String query, Double lat, Double lng, int radius, int size, boolean restrict) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("textQuery", query);
         body.put("languageCode", "ko");
         body.put("pageSize", size);
-        if (lat != null) {
+        if (lat != null && !restrict) {
             body.put("locationBias", Map.of("circle", Map.of(
                     "center", Map.of("latitude", lat, "longitude", lng),
                     "radius", radius)));
+        } else if (lat != null) {
+            // 검색 API는 제한(restriction). 우선(bias)이면 "그레이스리 호텔"을 오사카에서 찾아도 서울 지점만 나옴 (2026-11-03 확인)
+            // restriction은 사각형만 지원해서 반경을 감싸는 사각형으로 보냄
+            double dLat = radius / 111_320.0;
+            double dLng = radius / (111_320.0 * Math.cos(Math.toRadians(lat)));
+            body.put("locationRestriction", Map.of("rectangle", Map.of(
+                    "low", Map.of("latitude", lat - dLat, "longitude", lng - dLng),
+                    "high", Map.of("latitude", lat + dLat, "longitude", lng + dLng))));
         }
         SearchResponse res = rest.post().uri(SEARCH_URL)
                 .contentType(MediaType.APPLICATION_JSON)
