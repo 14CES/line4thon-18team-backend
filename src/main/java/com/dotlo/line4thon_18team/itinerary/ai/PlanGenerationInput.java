@@ -18,8 +18,15 @@ import java.util.Objects;
 public record PlanGenerationInput(String city, int dayCount, PreferenceProfile preferences, List<Candidate> places,
                                   List<String> previousProblems) {
 
-    /** @param number 1부터 시작하는 장소 번호. 모델은 이 번호로만 답한다. */
+    /**
+     * @param number   1부터 시작하는 장소 번호. 모델은 이 번호로만 답한다.
+     * @param category 장소 유형. 보강 전이거나 매칭에 실패한 장소는 비어 있어서 OTHER로 채운다.
+     */
     public record Candidate(int number, String placeId, String name, PlaceCategory category) {
+
+        public Candidate {
+            category = category == null ? PlaceCategory.OTHER : category;
+        }
     }
 
     public PlanGenerationInput {
@@ -50,8 +57,12 @@ public record PlanGenerationInput(String city, int dayCount, PreferenceProfile p
         return new PlanGenerationInput(city, dayCount, preferences, places, problems);
     }
 
-    /** 번호를 붙이기 전의 장소. */
+    /** 번호를 붙이기 전의 장소. category가 비어 있으면 OTHER로 본다. */
     public record PlaceRef(String placeId, String name, PlaceCategory category) {
+
+        public PlaceRef {
+            category = category == null ? PlaceCategory.OTHER : category;
+        }
     }
 
     public Candidate byNumber(int number) {

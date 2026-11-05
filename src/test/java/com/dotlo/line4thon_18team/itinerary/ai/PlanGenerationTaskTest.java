@@ -53,6 +53,16 @@ class PlanGenerationTaskTest {
     }
 
     @Test
+    void 장소_유형이_없으면_기타로_넣는다() {
+        // 보강 전이거나 매칭에 실패한 장소는 category가 비어 있다
+        PlanGenerationInput input = PlanGenerationInput.of("오사카", 2, NORMAL, List.of(
+                new PlaceRef("p-unknown", "이름만 있는 장소", null)));
+
+        assertThat(input.byNumber(1).category()).isEqualTo(PlaceCategory.OTHER);
+        assertThat(PlanGenerationTask.userPrompt(input)).contains("1. 이름만 있는 장소 (기타)");
+    }
+
+    @Test
     void 메모에_태그를_넣어도_프롬프트_구조를_망가뜨리지_못한다() {
         PreferenceProfile injected = new PreferenceProfile(TravelPace.NORMAL, WalkingPreference.NORMAL,
                 DayStartPreference.NORMAL, List.of(), List.of(),
