@@ -47,6 +47,8 @@ public enum ErrorCode {
     SAVED_PLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "저장 장소를 찾을 수 없습니다."),
     INVALID_PLACE_ID(HttpStatus.BAD_REQUEST, "존재하지 않는 장소입니다."),
     PLACE_NOT_REVIEWABLE(HttpStatus.CONFLICT, "확인 필요 상태인 장소만 후보를 선택할 수 있습니다."),
+    INVALID_LIST_URL(HttpStatus.BAD_REQUEST, "구글맵 공유 리스트 링크가 아닙니다."),
+    LIST_NOT_ACCESSIBLE(HttpStatus.BAD_REQUEST, "리스트를 열 수 없습니다. 공개된 공유 리스트 링크인지 확인해 주세요."),
 
     // ===== 일정·AI (BE3) =====
     PREFERENCE_TEXT_TOO_LONG(HttpStatus.BAD_REQUEST, "취향은 500자 이하로 입력해 주세요."),

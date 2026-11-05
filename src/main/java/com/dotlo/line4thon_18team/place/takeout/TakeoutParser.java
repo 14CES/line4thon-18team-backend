@@ -2,6 +2,8 @@ package com.dotlo.line4thon_18team.place.takeout;
 
 import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.error.ErrorCode;
+import com.dotlo.line4thon_18team.place.importer.ImportedList;
+import com.dotlo.line4thon_18team.place.importer.ImportedPlace;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -50,13 +52,13 @@ public class TakeoutParser {
     private static final Pattern COORDINATES =
             Pattern.compile("(?:/search/|[?&]q=|@)(-?\\d{1,2}(?:\\.\\d+)?),\\s*(-?\\d{1,3}(?:\\.\\d+)?)");
 
-    public List<TakeoutList> parse(MultipartFile file) {
+    public List<ImportedList> parse(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException(ErrorCode.EMPTY_FILE);
         }
         String filename = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase();
 
-        List<TakeoutList> lists;
+        List<ImportedList> lists;
         if (filename.endsWith(".csv")) {
             lists = List.of(parseCsv(file.getOriginalFilename(), readBytes(file), true));
         } else if (filename.endsWith(".zip")) {
@@ -74,8 +76,8 @@ public class TakeoutParser {
     // ---------- zip ----------
 
     // zip 안의 CSV 를 전부 읽는다. Takeout 형식이 아닌 CSV(다른 서비스 데이터)는 건너뛴다.
-    private List<TakeoutList> parseZip(MultipartFile file) {
-        List<TakeoutList> lists = new ArrayList<>();
+    private List<ImportedList> parseZip(MultipartFile file) {
+        List<ImportedList> lists = new ArrayList<>();
         long totalBytes = 0;
 
         try (ZipInputStream zip = new ZipInputStream(file.getInputStream(), StandardCharsets.UTF_8)) {
@@ -87,7 +89,7 @@ public class TakeoutParser {
                 byte[] bytes = readEntry(zip, MAX_UNZIPPED_BYTES - totalBytes);
                 totalBytes += bytes.length;
 
-                TakeoutList list = parseCsv(entry.getName(), bytes, false);
+                ImportedList list = parseCsv(entry.getName(), bytes, false);
                 if (list != null) {
                     lists.add(list);
                 }
@@ -122,7 +124,7 @@ public class TakeoutParser {
     /**
      * @param strict true 면 Takeout 형식이 아닐 때 에러, false(zip 안의 파일)면 null 을 돌려줘서 건너뛴다
      */
-    private TakeoutList parseCsv(String path, byte[] bytes, boolean strict) {
+    private ImportedList parseCsv(String path, byte[] bytes, boolean strict) {
         String text = new String(bytes, StandardCharsets.UTF_8);
         if (text.startsWith(UTF8_BOM)) {
             text = text.substring(1);   // 엑셀 등이 붙이는 BOM 이 있으면 첫 열 이름이 "﻿제목" 이 돼서 제거
@@ -141,28 +143,28 @@ public class TakeoutParser {
             return null;
         }
 
-        List<TakeoutPlace> places = new ArrayList<>();
+        List<ImportedPlace> places = new ArrayList<>();
         int skippedRows = 0;
         for (List<String> row : rows.subList(1, rows.size())) {
             if (row.stream().allMatch(String::isBlank)) {
                 continue;   // Takeout CSV 는 헤더 바로 다음에 빈 줄이 있다
             }
-            TakeoutPlace place = toPlace(cell(row, titleIndex), cell(row, noteIndex), cell(row, urlIndex));
+            ImportedPlace place = toPlace(cell(row, titleIndex), cell(row, noteIndex), cell(row, urlIndex));
             if (place == null) {
                 skippedRows++;
             } else {
                 places.add(place);
             }
         }
-        return new TakeoutList(toListName(path), places, skippedRows);
+        return new ImportedList(toListName(path), places, skippedRows);
     }
 
-    private TakeoutPlace toPlace(String name, String note, String url) {
+    private ImportedPlace toPlace(String name, String note, String url) {
         String noteOrNull = note.isEmpty() ? null : note;
 
         Matcher featureId = FEATURE_ID.matcher(url);
         if (featureId.find() && !name.isEmpty()) {
-            return new TakeoutPlace(name, noteOrNull, url, featureId.group(1) + ":" + featureId.group(2), null, null);
+            return new ImportedPlace(name, noteOrNull, url, featureId.group(1) + ":" + featureId.group(2), null, null);
         }
 
         Matcher coordinates = COORDINATES.matcher(URLDecoder.decode(url, StandardCharsets.UTF_8));
@@ -170,7 +172,7 @@ public class TakeoutParser {
             double lat = Double.parseDouble(coordinates.group(1));
             double lng = Double.parseDouble(coordinates.group(2));
             String placeName = name.isEmpty() ? lat + ", " + lng : name;   // 이름 없는 핀은 좌표를 이름으로
-            return new TakeoutPlace(placeName, noteOrNull, url, null, lat, lng);
+            return new ImportedPlace(placeName, noteOrNull, url, null, lat, lng);
         }
         return null;
     }
