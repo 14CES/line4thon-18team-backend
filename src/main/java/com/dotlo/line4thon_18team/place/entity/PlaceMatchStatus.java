@@ -8,5 +8,7 @@ public enum PlaceMatchStatus {
     PENDING,       // 아직 매칭 전
     MATCHED,       // place_id·좌표 확정
     NEEDS_REVIEW,  // 사용자가 후보 중 선택해야 함
-    NOT_FOUND      // 검색 결과 없음
+    NOT_FOUND,     // 검색 결과 없음
+    CLOSED,        // 찾았지만 폐업 → 일정에서 제외
+    OUT_OF_CITY    // 찾았지만 여행 도시 중심 50km 밖 → 일정에서 제외
 }

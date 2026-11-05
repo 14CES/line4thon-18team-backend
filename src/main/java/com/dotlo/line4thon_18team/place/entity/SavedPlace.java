@@ -100,4 +100,20 @@ public class SavedPlace extends BaseTimeEntity {
     public void addListName(String listName) {
         listNames.add(listName);
     }
+
+    // BE2 보강: 찾은 장소 정보를 채운다 (status: MATCHED / CLOSED / OUT_OF_CITY)
+    public void applyMatch(String placeId, String address, double latitude, double longitude,
+                           PlaceCategory category, PlaceMatchStatus status) {
+        this.placeId = placeId;
+        this.address = address;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.category = category;
+        this.matchStatus = status;
+    }
+
+    // BE2 보강: 장소를 확정하지 못함 (NEEDS_REVIEW / NOT_FOUND). 핀 좌표는 그대로 둔다
+    public void updateMatchStatus(PlaceMatchStatus status) {
+        this.matchStatus = status;
+    }
 }
