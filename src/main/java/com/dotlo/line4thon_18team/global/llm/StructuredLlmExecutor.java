@@ -97,7 +97,7 @@ public class StructuredLlmExecutor {
             List<String> problems = new ArrayList<>();
             O value = response.isTruncated()
                     ? truncated(problems)
-                    : parseAndCheck(task, response.content(), problems);
+                    : parseAndCheck(task, input, response.content(), problems);
 
             if (problems.isEmpty()) {
                 if (attempt > 1) {
@@ -120,7 +120,7 @@ public class StructuredLlmExecutor {
         throw new LlmOutputInvalidException(task.name(), attemptErrors);
     }
 
-    private <I, O> O parseAndCheck(LlmTask<I, O> task, String content, List<String> problems) {
+    private <I, O> O parseAndCheck(LlmTask<I, O> task, I input, String content, List<String> problems) {
         if (content == null || content.isBlank()) {
             problems.add("응답이 비어 있습니다");
             return null;
@@ -145,7 +145,7 @@ public class StructuredLlmExecutor {
             return null;
         }
         value = task.normalize(value);
-        problems.addAll(task.validate(value));
+        problems.addAll(task.validate(input, value));
         return value;
     }
 
