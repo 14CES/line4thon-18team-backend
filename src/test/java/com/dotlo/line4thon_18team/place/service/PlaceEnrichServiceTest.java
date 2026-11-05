@@ -9,6 +9,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.dotlo.line4thon_18team.global.error.BusinessException;
+import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.place.PlaceCategory;
 import com.dotlo.line4thon_18team.place.PlaceMatcher;
 import com.dotlo.line4thon_18team.place.PlaceMatcher.Candidate;
@@ -48,6 +50,7 @@ class PlaceEnrichServiceTest {
         LocalDate start = LocalDate.of(2026, 11, 10);
         trip = Trip.create(User.builder().googleSub("s").email("a@b.c").name("n").build(),
                 "오사카", start, start.plusDays(2), Companion.ALONE, null);
+        ReflectionTestUtils.setField(trip, "id", 7L);
         when(tripService.findOwnedTrip(1L, 7L)).thenReturn(trip);
     }
 
@@ -69,6 +72,7 @@ class PlaceEnrichServiceTest {
         service.enrich(1L, 7L);
 
         assertThat(ichiran.getMatchStatus()).isEqualTo(PlaceMatchStatus.MATCHED);
+        assertThat(ichiran.getName()).isEqualTo("이치란");   // 사용자가 저장한 이름은 그대로
         assertThat(ichiran.getPlaceId()).isEqualTo("p1");
         assertThat(ichiran.getAddress()).isEqualTo("오사카");
         assertThat(ichiran.getCategory()).isEqualTo(PlaceCategory.FOOD);
@@ -111,11 +115,98 @@ class PlaceEnrichServiceTest {
     }
 
     @Test
+    void 합칠_때_지우는_행의_메모를_옮긴다() {
+        SavedPlace existing = place(1L, "이치란", "오사카 맛집", "줄 김");
+        SavedPlace pin = place(2L, "34.7055, 135.4975", "라멘", "야간 영업");
+        SavedPlace noNote = place(3L, "이치란 핀", "라멘2", null);
+        pending(pin, noNote);
+        when(repository.findFirstByTripIdAndPlaceId(7L, "p1")).thenReturn(Optional.of(existing));
+        Candidate ichiran = new Candidate("p1", "이치란", "오사카", 34.70, 135.50);
+        googleReturns(Map.of(
+                2L, matched(2L, ichiran, PlaceCategory.FOOD, false),
+                3L, matched(3L, ichiran, PlaceCategory.FOOD, false)));
+
+        service.enrich(1L, 7L);
+
+        assertThat(existing.getNote()).isEqualTo("줄 김\n야간 영업");
+        assertThat(existing.getListNames()).containsExactlyInAnyOrder("오사카 맛집", "라멘", "라멘2");
+    }
+
+    @Test
+    void 메모가_없는_행에_합치면_옮긴_메모가_그대로_들어간다() {
+        SavedPlace existing = place(1L, "34.7055, 135.4975", "라멘", null);
+        SavedPlace named = place(2L, "이치란", "오사카 맛집", "줄 김");
+        pending(named);
+        when(repository.findFirstByTripIdAndPlaceId(7L, "p1")).thenReturn(Optional.of(existing));
+        googleReturns(Map.of(2L, matched(2L, new Candidate("p1", "이치란", "오사카", 34.70, 135.50), PlaceCategory.FOOD, false)));
+
+        service.enrich(1L, 7L);
+
+        assertThat(existing.getNote()).isEqualTo("줄 김");
+    }
+
+    @Test
+    void 후보를_고르면_확정되고_좌표_이름은_구글_이름으로_바뀐다() {
+        SavedPlace pin = place(1L, "34.6463062, 135.5133091", "리스트");
+        pin.updateMatchStatus(PlaceMatchStatus.NEEDS_REVIEW);
+        when(repository.findById(1L)).thenReturn(Optional.of(pin));
+        when(placeMatcher.details(1L, "p1")).thenReturn(
+                matched(1L, new Candidate("p1", "하루카스 300", "오사카 아베노", 34.646, 135.513), PlaceCategory.SIGHTSEEING, false));
+
+        service.match(1L, 7L, 1L, "p1");
+
+        assertThat(pin.getMatchStatus()).isEqualTo(PlaceMatchStatus.MATCHED);
+        assertThat(pin.getName()).isEqualTo("하루카스 300");
+        assertThat(pin.getPlaceId()).isEqualTo("p1");
+        assertThat(pin.getCategory()).isEqualTo(PlaceCategory.SIGHTSEEING);
+    }
+
+    @Test
+    void 고른_장소가_도시_밖이면_OUT_OF_CITY다() {
+        SavedPlace place = place(1L, "기요미즈데라", "리스트");
+        place.updateMatchStatus(PlaceMatchStatus.NEEDS_REVIEW);
+        when(repository.findById(1L)).thenReturn(Optional.of(place));
+        when(placeMatcher.details(1L, "p3")).thenReturn(
+                matched(1L, new Candidate("p3", "히메지성", "히메지", 34.84, 134.69), PlaceCategory.CULTURE, false));
+
+        service.match(1L, 7L, 1L, "p3");
+
+        assertThat(place.getMatchStatus()).isEqualTo(PlaceMatchStatus.OUT_OF_CITY);
+        assertThat(place.getName()).isEqualTo("기요미즈데라");
+    }
+
+    @Test
+    void 확인_필요가_아닌_장소는_고를_수_없고_구글을_부르지_않는다() {
+        SavedPlace place = place(1L, "이치란", "리스트");   // PENDING
+        when(repository.findById(1L)).thenReturn(Optional.of(place));
+
+        assertThatThrownBy(() -> service.match(1L, 7L, 1L, "p1"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.PLACE_NOT_REVIEWABLE);
+        verify(placeMatcher, never()).details(any(), any());
+    }
+
+    @Test
+    void 다른_여행의_장소면_404다() {
+        Trip other = Trip.create(User.builder().googleSub("o").email("o@b.c").name("o").build(),
+                "오사카", LocalDate.of(2026, 11, 10), LocalDate.of(2026, 11, 12), Companion.ALONE, null);
+        ReflectionTestUtils.setField(other, "id", 8L);
+        SavedPlace othersPlace = SavedPlace.fromTakeout(other, null, "남의 장소", null, null, null, null, "리스트");
+        ReflectionTestUtils.setField(othersPlace, "id", 1L);
+        othersPlace.updateMatchStatus(PlaceMatchStatus.NEEDS_REVIEW);
+        when(repository.findById(1L)).thenReturn(Optional.of(othersPlace));
+
+        assertThatThrownBy(() -> service.match(1L, 7L, 1L, "p1"))
+                .extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.SAVED_PLACE_NOT_FOUND);
+        verify(placeMatcher, never()).details(any(), any());
+    }
+
+    @Test
     void 보강이_두_번_동시에_돌아_이미_처리된_장소면_건드리지_않는다() {
         SavedPlace ichiran = place(1L, "이치란", "오사카 맛집");
         pending(ichiran);
         // 다른 요청이 먼저 이 장소를 매칭해서 저장한 상태
-        ichiran.applyMatch("p1", "오사카", 34.70, 135.50, PlaceCategory.FOOD, PlaceMatchStatus.MATCHED);
+        ichiran.applyMatch("이치란", "p1", "오사카", 34.70, 135.50, PlaceCategory.FOOD, PlaceMatchStatus.MATCHED);
         when(repository.findFirstByTripIdAndPlaceId(7L, "p1")).thenReturn(Optional.of(ichiran));
         googleReturns(Map.of(
                 1L, matched(1L, new Candidate("p1", "이치란", "오사카", 34.70, 135.50), PlaceCategory.FOOD, false)));
@@ -127,7 +218,11 @@ class PlaceEnrichServiceTest {
     }
 
     private SavedPlace place(Long id, String name, String listName) {
-        SavedPlace p = SavedPlace.fromTakeout(trip, null, name, null, null, null, null, listName);
+        return place(id, name, listName, null);
+    }
+
+    private SavedPlace place(Long id, String name, String listName, String note) {
+        SavedPlace p = SavedPlace.fromTakeout(trip, null, name, note, null, null, null, listName);
         ReflectionTestUtils.setField(p, "id", id);
         return p;
     }
