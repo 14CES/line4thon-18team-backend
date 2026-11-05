@@ -10,6 +10,7 @@ import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 /** BE2 장소 매칭. BE1은 이 서비스를 주입받아 직접 호출합니다. */
@@ -56,10 +57,14 @@ public class PlaceMatcher {
     private static final String FIELD_MASK =
             "places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri,"
                     + "places.primaryType,places.types,places.businessStatus";  // 전부 Text Search Pro 요금
+    private static final String DETAILS_URL = "https://places.googleapis.com/v1/places/{placeId}?languageCode=ko";
+    private static final String DETAILS_FIELD_MASK =
+            "id,displayName,formattedAddress,location,primaryType,types,businessStatus";  // 전부 Place Details Pro 요금
     private static final int CITY_RADIUS_M = 15000;
     private static final int PLACE_RADIUS_M = 200;
     private static final int MAX_DIST_M = 50;
     private static final Pattern CID_PARAM = Pattern.compile("[?&]cid=(\\d+)");
+    private static final Pattern COORDINATES = Pattern.compile("\\s*-?\\d+(\\.\\d+)?\\s*,\\s*-?\\d+(\\.\\d+)?\\s*");
 
     private final String apiKey;
     private final RestClient rest = GoogleClient.create();
@@ -90,7 +95,31 @@ public class PlaceMatcher {
                 .toList();
     }
 
+    // 사용자가 고른 장소(placeId)의 정보. 결과는 MATCHED (폐업·도시 밖 판단은 받는 쪽에서)
+    public MatchResult details(Long id, String placeId) {
+        Place pl;
+        try {
+            pl = rest.get().uri(DETAILS_URL, placeId)
+                    .header("X-Goog-Api-Key", apiKey)
+                    .header("X-Goog-FieldMask", DETAILS_FIELD_MASK)
+                    .retrieve()
+                    .body(Place.class);
+        } catch (HttpClientErrorException.BadRequest e) {
+            // 키가 틀려도 400이라 메시지로 구분: "The provided Place ID: ... is not valid." (2026-11-05 확인)
+            if (e.getResponseBodyAsString().contains("Place ID")) throw new BusinessException(ErrorCode.INVALID_PLACE_ID);
+            throw e;
+        }
+        return matched(new PlaceInput(id, null, null, null, null), toHit(pl));
+    }
+
+    // Takeout 에서 이름 없는 핀은 이름이 "34.6687, 135.5013" 처럼 좌표로 들어온다 (TakeoutParser)
+    public static boolean isCoordinates(String name) {
+        return name != null && COORDINATES.matcher(name).matches();
+    }
+
     private MatchResult match(PlaceInput p, double cityLat, double cityLng) {
+        // 구글 검색은 검색어가 좌표면 400 오류를 냄 (2026-11-05 확인). 검색하지 않고 사용자가 후보를 고르게 함
+        if (isCoordinates(p.name())) return new MatchResult(p.id(), MatchStatus.NEEDS_REVIEW, null, List.of(), null, false);
         boolean hasCoord = p.lat() != null && p.lng() != null;
         // 좌표 있으면 그 자리 200m, 없으면 도시 중심 15km
         // 우선(bias)만 걸어서 도시 밖 장소도 찾음. 제한(restriction)이면 교토 기요미즈데라가 오사카 덴노지 기요미즈데라로 바뀜 (2026-11-04 확인)
@@ -156,14 +185,16 @@ public class PlaceMatcher {
                 .body(SearchResponse.class);
         if (res == null || res.places() == null) return List.of();  // 결과 0개면 {} 가 옴
 
-        return res.places().stream().map(pl -> {
-            Matcher m = CID_PARAM.matcher(pl.googleMapsUri() == null ? "" : pl.googleMapsUri());
-            return new Hit(new Candidate(pl.id(), pl.displayName().text(), pl.formattedAddress(),
-                    pl.location().latitude(), pl.location().longitude()),
-                    m.find() ? m.group(1) : null,
-                    PlaceCategoryMapper.of(pl.primaryType(), pl.types()),
-                    "CLOSED_PERMANENTLY".equals(pl.businessStatus()));
-        }).toList();
+        return res.places().stream().map(PlaceMatcher::toHit).toList();
+    }
+
+    private static Hit toHit(Place pl) {
+        Matcher m = CID_PARAM.matcher(pl.googleMapsUri() == null ? "" : pl.googleMapsUri());
+        return new Hit(new Candidate(pl.id(), pl.displayName().text(), pl.formattedAddress(),
+                pl.location().latitude(), pl.location().longitude()),
+                m.find() ? m.group(1) : null,
+                PlaceCategoryMapper.of(pl.primaryType(), pl.types()),
+                "CLOSED_PERMANENTLY".equals(pl.businessStatus()));
     }
 
     public static double meters(double lat1, double lng1, double lat2, double lng2) {

@@ -37,37 +37,55 @@ public class PlaceEnrichService {
     // 트랜잭션은 장소 1개 저장할 때만 연다. 구글을 기다리는 동안 DB 연결을 잡지 않고,
     // 중간에 구글 오류가 나도 앞 장소 결과는 남는다 (남은 장소는 PENDING → 다시 호출하면 이어서 처리)
     public void enrich(Long userId, Long tripId) {
-        Trip trip = tripService.findOwnedTrip(userId, tripId);   // 없는 여행·남의 여행이면 404
-        City city = CityController.findByName(trip.getCity())
-                .orElseThrow(() -> new BusinessException(ErrorCode.UNSUPPORTED_CITY));
-
+        City city = cityOf(userId, tripId);
         for (SavedPlace p : savedPlaceRepository.findAllByTripIdAndMatchStatus(tripId, PlaceMatchStatus.PENDING)) {
             PlaceInput input = new PlaceInput(p.getId(), p.getName(), p.getFeatureId(), p.getLatitude(), p.getLongitude());
             MatchResult r = placeMatcher.matchPlaces(List.of(input), city.lat(), city.lng()).get(0);
-            transactionTemplate.executeWithoutResult(status -> save(tripId, city, r));
+            transactionTemplate.executeWithoutResult(status -> save(tripId, city, r, PlaceMatchStatus.PENDING));
         }
     }
 
-    private void save(Long tripId, City city, MatchResult r) {
+    // 후보 선택: 확인 필요(NEEDS_REVIEW) 장소를 사용자가 고른 구글 장소로 확정한다. 폐업·도시 밖 판단은 보강과 같다
+    public void match(Long userId, Long tripId, Long savedPlaceId, String googlePlaceId) {
+        City city = cityOf(userId, tripId);
+        SavedPlace place = savedPlaceRepository.findById(savedPlaceId)
+                .filter(p -> p.getTrip().getId().equals(tripId))
+                .orElseThrow(() -> new BusinessException(ErrorCode.SAVED_PLACE_NOT_FOUND));
+        if (place.getMatchStatus() != PlaceMatchStatus.NEEDS_REVIEW) throw new BusinessException(ErrorCode.PLACE_NOT_REVIEWABLE);
+
+        MatchResult r = placeMatcher.details(savedPlaceId, googlePlaceId);   // 없는 placeId면 400
+        transactionTemplate.executeWithoutResult(status -> save(tripId, city, r, PlaceMatchStatus.NEEDS_REVIEW));
+    }
+
+    private City cityOf(Long userId, Long tripId) {
+        Trip trip = tripService.findOwnedTrip(userId, tripId);   // 없는 여행·남의 여행이면 404
+        return CityController.findByName(trip.getCity())
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNSUPPORTED_CITY));
+    }
+
+    // from: 저장 직전에도 이 상태여야 저장한다
+    private void save(Long tripId, City city, MatchResult r, PlaceMatchStatus from) {
         SavedPlace place = savedPlaceRepository.findById(r.id()).orElse(null);
-        // 보강 도중 사용자가 삭제했거나, 동시에 들어온 다른 보강 요청이 먼저 처리한 장소.
+        // 그사이 사용자가 삭제했거나, 동시에 들어온 다른 요청이 먼저 처리한 장소.
         // 처리된 장소는 placeId 가 있어서, 그냥 진행하면 아래 중복 확인에서 자기 자신을 찾아 지운다
-        if (place == null || place.getMatchStatus() != PlaceMatchStatus.PENDING) return;
+        if (place == null || place.getMatchStatus() != from) return;
         if (r.status() != PlaceMatcher.MatchStatus.MATCHED) {
             place.updateMatchStatus(PlaceMatchStatus.valueOf(r.status().name()));   // NEEDS_REVIEW / NOT_FOUND
             return;
         }
         Candidate c = r.place();
-        // 같은 가게를 장소로도 핀으로도 저장했으면 리스트 이름만 합치고 이 행은 지운다 (업로드 중복 처리와 같은 방식)
+        // 같은 가게를 장소로도 핀으로도 저장했으면 이 행의 리스트 이름·메모를 기존 행으로 옮기고 이 행은 지운다
         SavedPlace same = savedPlaceRepository.findFirstByTripIdAndPlaceId(tripId, c.placeId()).orElse(null);
         if (same != null) {
-            place.getListNames().forEach(same::addListName);
+            same.mergeFrom(place);
             savedPlaceRepository.delete(place);
             return;
         }
         PlaceMatchStatus status = r.closed() ? PlaceMatchStatus.CLOSED
                 : PlaceMatcher.meters(city.lat(), city.lng(), c.lat(), c.lng()) > CITY_LIMIT_M ? PlaceMatchStatus.OUT_OF_CITY
                 : PlaceMatchStatus.MATCHED;
-        place.applyMatch(c.placeId(), c.address(), c.lat(), c.lng(), r.category(), status);
+        // 이름 없는 핀(이름이 좌표)은 구글 장소 이름으로
+        String name = PlaceMatcher.isCoordinates(place.getName()) ? c.name() : place.getName();
+        place.applyMatch(name, c.placeId(), c.address(), c.lat(), c.lng(), r.category(), status);
     }
 }

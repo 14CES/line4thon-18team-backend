@@ -1,17 +1,21 @@
 package com.dotlo.line4thon_18team.place.controller;
 
 import com.dotlo.line4thon_18team.auth.LoginUser;
+import com.dotlo.line4thon_18team.place.dto.PlaceMatchRequest;
 import com.dotlo.line4thon_18team.place.dto.SavedPlaceListResponse;
 import com.dotlo.line4thon_18team.place.dto.TakeoutUploadResponse;
 import com.dotlo.line4thon_18team.place.service.PlaceEnrichService;
 import com.dotlo.line4thon_18team.place.service.SavedPlaceService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -43,6 +47,16 @@ public class SavedPlaceController {
     @PostMapping("/enrich")
     public ResponseEntity<SavedPlaceListResponse> enrichPlaces(@LoginUser Long userId, @PathVariable Long tripId) {
         placeEnrichService.enrich(userId, tripId);
+        return ResponseEntity.ok(savedPlaceService.getPlaces(userId, tripId));
+    }
+
+    // 후보 선택: 확인 필요(NEEDS_REVIEW) 장소를 사용자가 고른 구글 장소로 확정하고, 전체 목록을 돌려준다
+    // 경로의 placeId 는 저장 장소 id, 본문의 placeId 는 구글 장소 ID. 같은 장소가 이미 있으면 합쳐져서 이 장소는 목록에서 빠진다
+    @PatchMapping("/{placeId}/match")
+    public ResponseEntity<SavedPlaceListResponse> matchPlace(@LoginUser Long userId, @PathVariable Long tripId,
+                                                             @PathVariable Long placeId,
+                                                             @Valid @RequestBody PlaceMatchRequest request) {
+        placeEnrichService.match(userId, tripId, placeId, request.placeId());
         return ResponseEntity.ok(savedPlaceService.getPlaces(userId, tripId));
     }
 
