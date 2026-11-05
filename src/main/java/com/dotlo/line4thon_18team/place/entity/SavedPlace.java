@@ -82,6 +82,17 @@ public class SavedPlace extends BaseTimeEntity {
     // Takeout 에서 읽은 장소. featureId 가 없는 핀은 URL 의 좌표를 미리 넣어둔다 (매칭 전이라 PENDING)
     public static SavedPlace fromTakeout(Trip trip, String featureId, String name, String note, String googleUrl,
                                          Double latitude, Double longitude, String listName) {
+        return imported(PlaceSource.TAKEOUT, trip, featureId, name, note, googleUrl, latitude, longitude, listName);
+    }
+
+    // 구글맵 공유 리스트 링크에서 읽은 장소 (매칭 전이라 PENDING)
+    public static SavedPlace fromSharedLink(Trip trip, String featureId, String name, String note, String googleUrl,
+                                            Double latitude, Double longitude, String listName) {
+        return imported(PlaceSource.SHARED_LINK, trip, featureId, name, note, googleUrl, latitude, longitude, listName);
+    }
+
+    private static SavedPlace imported(PlaceSource source, Trip trip, String featureId, String name, String note,
+                                       String googleUrl, Double latitude, Double longitude, String listName) {
         SavedPlace place = new SavedPlace();
         place.trip = trip;
         place.featureId = featureId;
@@ -90,7 +101,7 @@ public class SavedPlace extends BaseTimeEntity {
         place.googleUrl = googleUrl;
         place.latitude = latitude;
         place.longitude = longitude;
-        place.source = PlaceSource.TAKEOUT;
+        place.source = source;
         place.matchStatus = PlaceMatchStatus.PENDING;
         place.listNames.add(listName);
         return place;
@@ -99,6 +110,13 @@ public class SavedPlace extends BaseTimeEntity {
     // 이미 있던 장소가 다른 리스트에도 있으면 리스트 이름만 추가
     public void addListName(String listName) {
         listNames.add(listName);
+    }
+
+    // 메모가 없는 장소(공유 링크로 먼저 들어온 장소)에 나중에 올린 Takeout 메모를 채운다
+    public void fillNoteIfEmpty(String note) {
+        if (this.note == null && note != null) {
+            this.note = note;
+        }
     }
 
     // BE2 보강: 찾은 장소 정보를 채운다 (status: MATCHED / CLOSED / OUT_OF_CITY)
