@@ -15,6 +15,7 @@ import com.dotlo.line4thon_18team.place.OpeningHours;
 import com.dotlo.line4thon_18team.place.entity.SavedPlace;
 import com.dotlo.line4thon_18team.place.repository.SavedPlaceRepository;
 import com.dotlo.line4thon_18team.preference.PreferenceService;
+import com.dotlo.line4thon_18team.preference.domain.PreferenceProfile;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.service.TripService;
 import lombok.RequiredArgsConstructor;
@@ -46,18 +47,39 @@ public class ItineraryValidationService {
      * @throws BusinessException 남의 여행·없는 여행(404), 일정 입력이 잘못된 경우(400)
      */
     public ValidationResult validate(long tripId, long userId, ItineraryDraft draft, ValidationOrigin origin) {
+        return prepare(tripId, userId).validate(draft, origin);
+    }
+
+    /**
+     * 여행·저장 장소·취향을 한 번만 읽어두고 여러 번 검증할 때 쓴다 (일정 생성에서 재생성할 때).
+     *
+     * @throws BusinessException 남의 여행·없는 여행(404)
+     */
+    ValidationRun prepare(long tripId, long userId) {
         Trip trip = tripService.findOwnedTrip(userId, tripId);
         List<SavedPlace> places = savedPlaceRepository.findAllByTripIdOrderByIdAsc(tripId);
-
         ItineraryValidator validator = new ItineraryValidator(
                 new SavedPlaceInfoProvider(places, openingHours::get), travelTimeProvider, validationPolicy);
-        try {
-            return validator.validate(draft, tripContext(trip), preferenceService.profileOrDefault(tripId, userId),
-                    origin);
-        } catch (IllegalArgumentException e) {
-            // 여행 기간 밖 날짜, 같은 날짜 중복, itemId 중복
-            throw new BusinessException(ErrorCode.INVALID_ITINERARY,
-                    ErrorCode.INVALID_ITINERARY.getMessage() + " " + e.getMessage());
+        return new ValidationRun(trip, places, validator, tripContext(trip),
+                preferenceService.profileOrDefault(tripId, userId));
+    }
+
+    /** 검증 한 판에 필요한 것들. 같은 여행을 여러 번 검증해도 조회는 한 번만 한다. */
+    record ValidationRun(Trip trip,
+                         List<SavedPlace> places,
+                         ItineraryValidator validator,
+                         TripContext context,
+                         PreferenceProfile preferences) {
+
+        /** @throws BusinessException 일정 입력이 잘못된 경우(400) */
+        ValidationResult validate(ItineraryDraft draft, ValidationOrigin origin) {
+            try {
+                return validator.validate(draft, context, preferences, origin);
+            } catch (IllegalArgumentException e) {
+                // 여행 기간 밖 날짜, 같은 날짜 중복, itemId 중복
+                throw new BusinessException(ErrorCode.INVALID_ITINERARY,
+                        ErrorCode.INVALID_ITINERARY.getMessage() + " " + e.getMessage());
+            }
         }
     }
 
