@@ -4,7 +4,9 @@ import com.dotlo.line4thon_18team.itinerary.validation.model.OpeningHours;
 import com.dotlo.line4thon_18team.itinerary.validation.model.WeeklyPeriod;
 import com.dotlo.line4thon_18team.place.OpeningHours.Hours;
 import com.dotlo.line4thon_18team.place.OpeningHours.Range;
+import com.dotlo.line4thon_18team.place.entity.SavedPlace;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -14,6 +16,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -67,6 +70,40 @@ class SavedPlaceInfoProviderTest {
         assertThat(hours.isAlwaysOpen()).isTrue();
         LocalDateTime dawn = MONDAY.atTime(3, 0);
         assertThat(hours.earliestStart(dawn, 60)).contains(dawn);
+    }
+
+    @Test
+    void 영업시간은_placeId마다_한_번만_조회한다() {
+        AtomicInteger calls = new AtomicInteger();
+        SavedPlaceInfoProvider provider = provider(calls,
+                days(Map.of(DayOfWeek.MONDAY, List.of(new Range(10 * 60, 22 * 60)))));
+
+        provider.findPlaces(List.of("p1"));
+        provider.findPlaces(List.of("p1"));
+        provider.findPlaces(List.of("p1"));
+
+        assertThat(calls.get()).isEqualTo(1);
+    }
+
+    @Test
+    void 영업시간이_없는_장소도_다시_조회하지_않는다() {
+        AtomicInteger calls = new AtomicInteger();
+        SavedPlaceInfoProvider provider = provider(calls, null);
+
+        provider.findPlaces(List.of("p1"));
+        provider.findPlaces(List.of("p1"));
+
+        assertThat(calls.get()).isEqualTo(1);
+    }
+
+    private static SavedPlaceInfoProvider provider(AtomicInteger calls, Hours hours) {
+        SavedPlace place = Mockito.mock(SavedPlace.class);
+        Mockito.when(place.getPlaceId()).thenReturn("p1");
+        Mockito.when(place.getName()).thenReturn("가게");
+        return new SavedPlaceInfoProvider(List.of(place), placeId -> {
+            calls.incrementAndGet();
+            return hours;
+        });
     }
 
     // BE2 Hours 는 모든 요일 키를 채워서 준다 (휴무인 요일은 빈 리스트)
