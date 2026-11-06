@@ -1,0 +1,159 @@
+package com.dotlo.line4thon_18team.itinerary;
+
+import com.dotlo.line4thon_18team.global.error.BusinessException;
+import com.dotlo.line4thon_18team.global.error.ErrorCode;
+import com.dotlo.line4thon_18team.global.llm.StructuredLlmExecutor;
+import com.dotlo.line4thon_18team.itinerary.ItineraryValidationService.ValidationRun;
+import com.dotlo.line4thon_18team.itinerary.ai.PlanGenerationInput;
+import com.dotlo.line4thon_18team.itinerary.ai.PlanGenerationOutput;
+import com.dotlo.line4thon_18team.itinerary.ai.PlanGenerationTask;
+import com.dotlo.line4thon_18team.itinerary.validation.model.DayDraft;
+import com.dotlo.line4thon_18team.itinerary.validation.model.ItineraryDraft;
+import com.dotlo.line4thon_18team.itinerary.validation.model.ValidationOrigin;
+import com.dotlo.line4thon_18team.itinerary.validation.model.VisitDraft;
+import com.dotlo.line4thon_18team.itinerary.validation.result.Severity;
+import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationIssue;
+import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
+import com.dotlo.line4thon_18team.place.entity.PlaceMatchStatus;
+import com.dotlo.line4thon_18team.place.entity.SavedPlace;
+import com.dotlo.line4thon_18team.trip.entity.Trip;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * AI 일정 생성 (GEN-PLAN-001).
+ *
+ * <pre>
+ *   저장 장소 → [AI가 일차별로 배치] → [검증기가 시각 계산] → 문제 없으면 끝
+ *                      ↑                        ↓ 문제 있으면
+ *                      └── 문제를 알려주고 다시 배치 (최대 2회)
+ * </pre>
+ *
+ * <p>AI는 "어떤 장소를 며칠째 몇 번째로" 까지만 정하고, 시각은 검증기가 이동시간·영업시간으로 계산한다.
+ * 아직 저장하지 않는다. 일정 저장(BE1)이 생기면 결과를 v1으로 저장한다.
+ */
+@Service
+@RequiredArgsConstructor
+
+public class ItineraryGenerationService {
+
+    private static final Logger log = LoggerFactory.getLogger(ItineraryGenerationService.class);
+
+    /** 처음 배치 1회 + 검증에 걸렸을 때 다시 배치 2회 (명세서: 내부에서 검증/최대 2회 재생성) */
+    private static final int MAX_ATTEMPTS = 3;
+
+    private final ItineraryValidationService validationService;
+    private final StructuredLlmExecutor llm;
+    private final PlanGenerationTask planGenerationTask;
+
+    /**
+     * <p>이 메서드에는 트랜잭션을 걸지 않는다. AI 응답을 기다리는 동안 DB 연결을 쥐고 있지 않기 위해서다.
+     * 조회는 {@link ItineraryValidationService#prepare}가 자기 트랜잭션에서 하고, 돌려받은 엔티티는
+     * 기본 필드만 읽는다 (연관 관계를 더 타면 트랜잭션이 이미 닫혀 있다).
+     * @throws BusinessException 남의 여행·없는 여행(404), 배치할 장소가 없음(400)
+     */
+    public GeneratedItinerary generate(long tripId, long userId) {
+        ValidationRun run = validationService.prepare(tripId, userId);
+        PlanGenerationInput input = buildInput(run);
+
+        GeneratedItinerary last = null;
+        List<String> problems = List.of();
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            PlanGenerationOutput plan = llm.execute(planGenerationTask, input.retryWith(problems)).value();
+            ItineraryDraft draft = toDraft(plan, input, run.trip().getStartDate());
+            ValidationResult validation = run.validate(draft, ValidationOrigin.AI_GENERATED);
+
+            last = new GeneratedItinerary(draft, validation, placeIds(plan.excluded(), input), attempt);
+            if (validation.summary().valid()) {
+                return last;
+            }
+            problems = describe(validation, draft, input);
+            log.info("일정 재생성 tripId={} attempt={}/{} problems={}", tripId, attempt, MAX_ATTEMPTS, problems);
+        }
+        // 끝까지 문제가 남으면 마지막 결과를 그대로 돌려준다. 화면에서 경고로 보여주고 사용자가 고치면 된다.
+        return last;
+    }
+
+    /** 매칭이 끝난 장소만 쓴다. place ID가 없으면 영업시간·이동시간을 조회할 수 없다. */
+    private static PlanGenerationInput buildInput(ValidationRun run) {
+        List<PlanGenerationInput.PlaceRef> candidates = run.places().stream()
+                .filter(place -> place.getMatchStatus() == PlaceMatchStatus.MATCHED && place.getPlaceId() != null)
+                .map(place -> new PlanGenerationInput.PlaceRef(place.getPlaceId(), place.getName(),
+                        place.getCategory()))
+                .toList();
+        if (candidates.isEmpty()) {
+            throw new BusinessException(ErrorCode.NO_PLACES_TO_PLAN);
+        }
+        Trip trip = run.trip();
+        int dayCount = (int) ChronoUnit.DAYS.between(trip.getStartDate(), trip.getEndDate()) + 1;
+        return PlanGenerationInput.of(trip.getCity(), dayCount, run.preferences(), candidates);
+    }
+
+    /** 장소 번호를 place ID로 되돌리고 itemId를 새로 만든다. */
+    private static ItineraryDraft toDraft(PlanGenerationOutput plan, PlanGenerationInput input, LocalDate startDate) {
+        List<DayDraft> days = new ArrayList<>();
+        for (PlanGenerationOutput.Day day : plan.days()) {
+            LocalDate date = startDate.plusDays(day.dayNumber() - 1L);
+            List<VisitDraft> visits = day.placeNumbers().stream()
+                    .map(number -> VisitDraft.of(newItemId(), input.byNumber(number).placeId()))
+                    .toList();
+            days.add(new DayDraft(date, visits));
+        }
+        return new ItineraryDraft(days);
+    }
+
+    /*
+     * 일정 항목 ID. 좋아요·댓글이 이 값을 기준으로 달려서, 나중에 일정을 고쳐도 그대로인 장소는 같은 ID를 유지해야 한다.
+     * DB가 매기는 번호를 쓰면 저장할 때마다 바뀌므로 여기서 만들어 둔다.
+     */
+    private static String newItemId() {
+        return "v-" + UUID.randomUUID().toString().substring(0, 8);
+    }
+
+    private static List<String> placeIds(List<Integer> numbers, PlanGenerationInput input) {
+        return numbers.stream().map(number -> input.byNumber(number).placeId()).toList();
+    }
+
+    /** 검증에 걸린 내용을 모델이 읽을 문장으로 바꾼다. */
+    private static List<String> describe(ValidationResult validation, ItineraryDraft draft,
+                                         PlanGenerationInput input) {
+        Map<String, String> nameByPlaceId = new LinkedHashMap<>();
+        input.places().forEach(place -> nameByPlaceId.put(place.placeId(), place.name()));
+        Map<String, String> placeIdByItemId = new LinkedHashMap<>();
+        draft.days().forEach(day -> day.visits()
+                .forEach(visit -> placeIdByItemId.put(visit.itemId(), visit.placeId())));
+
+        List<String> problems = new ArrayList<>();
+        for (ValidationIssue issue : validation.issues()) {
+            if (issue.severity() != Severity.ERROR) {
+                continue;
+            }
+            String placeId = issue.placeId() != null ? issue.placeId() : placeIdByItemId.get(issue.itemId());
+            String name = nameByPlaceId.getOrDefault(placeId, "(장소 미상)");
+            problems.add(issue.date() + " " + name + ": " + reason(issue));
+        }
+        return problems;
+    }
+
+    private static String reason(ValidationIssue issue) {
+        return switch (issue.code()) {
+            case OUTSIDE_OPENING_HOURS -> "영업시간에 맞지 않습니다 (도착 " + issue.params().get("arrival")
+                    + ", 영업 " + issue.params().get("openingHours") + ")";
+            case CLOSED_ON_DAY -> "그날 휴무입니다";
+            case FIXED_TIME_MISSED -> "예약 시각보다 늦게 도착합니다";
+            case LONG_WAIT -> "문 열 때까지 " + issue.params().get("waitMinutes") + "분을 기다려야 합니다";
+            case DAY_OVERFLOW -> "그날 일정이 " + issue.params().get("overflowMinutes") + "분 넘칩니다. 장소를 줄이거나 다른 날로 옮기세요";
+            default -> issue.code().name();
+        };
+    }
+}

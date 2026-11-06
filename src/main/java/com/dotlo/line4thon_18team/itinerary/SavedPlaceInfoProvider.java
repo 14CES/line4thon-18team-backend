@@ -13,6 +13,7 @@ import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,7 @@ import java.util.function.Function;
  *
  * <p>저장 장소는 여행 단위로 조회하므로 여행 하나를 검증할 때마다 새로 만든다.
  * 영업시간은 BE2가 Places API에서 바로 가져오고, 없거나 조회에 실패하면 '미확인'으로 둔다.
+ * 같은 provider로 여러 번 검증해도(일정 생성의 재배치) 영업시간은 placeId마다 한 번만 조회한다.
  */
 class SavedPlaceInfoProvider implements PlaceInfoProvider {
 
@@ -30,6 +32,8 @@ class SavedPlaceInfoProvider implements PlaceInfoProvider {
 
     private final Map<String, SavedPlace> byPlaceId;
     private final Function<String, com.dotlo.line4thon_18team.place.OpeningHours.Hours> hoursLookup;
+    /** placeId별 영업시간. '미확인'(null)도 담아서 다시 조회하지 않는다. */
+    private final Map<String, OpeningHours> hoursCache = new HashMap<>();
 
     SavedPlaceInfoProvider(List<SavedPlace> places,
                            Function<String, com.dotlo.line4thon_18team.place.OpeningHours.Hours> hoursLookup) {
@@ -64,8 +68,17 @@ class SavedPlaceInfoProvider implements PlaceInfoProvider {
         return new GeoPoint(place.getLatitude(), place.getLongitude());
     }
 
-    // 영업시간 정보가 없는 장소(거리, 동네 등)는 null, 조회 실패도 null('미확인')로 둔다.
     private OpeningHours openingHours(String placeId) {
+        if (hoursCache.containsKey(placeId)) {
+            return hoursCache.get(placeId);
+        }
+        OpeningHours hours = lookupHours(placeId);
+        hoursCache.put(placeId, hours);
+        return hours;
+    }
+
+    // 영업시간 정보가 없는 장소(거리, 동네 등)는 null, 조회 실패도 null('미확인')로 둔다.
+    private OpeningHours lookupHours(String placeId) {
         try {
             com.dotlo.line4thon_18team.place.OpeningHours.Hours hours = hoursLookup.apply(placeId);
             return hours == null ? null : toOpeningHours(hours);
