@@ -1,0 +1,12 @@
+.git
+.gitignore
+.github
+.idea
+*.iml
+.gradle
+build/
+out/
+*.md
+postman/
+db-setup.sql
+.env
