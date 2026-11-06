@@ -21,7 +21,6 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -45,7 +44,7 @@ import java.util.UUID;
  */
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
+
 public class ItineraryGenerationService {
 
     private static final Logger log = LoggerFactory.getLogger(ItineraryGenerationService.class);
@@ -58,6 +57,9 @@ public class ItineraryGenerationService {
     private final PlanGenerationTask planGenerationTask;
 
     /**
+     * <p>이 메서드에는 트랜잭션을 걸지 않는다. AI 응답을 기다리는 동안 DB 연결을 쥐고 있지 않기 위해서다.
+     * 조회는 {@link ItineraryValidationService#prepare}가 자기 트랜잭션에서 하고, 돌려받은 엔티티는
+     * 기본 필드만 읽는다 (연관 관계를 더 타면 트랜잭션이 이미 닫혀 있다).
      * @throws BusinessException 남의 여행·없는 여행(404), 배치할 장소가 없음(400)
      */
     public GeneratedItinerary generate(long tripId, long userId) {
