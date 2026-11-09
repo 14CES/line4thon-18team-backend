@@ -28,7 +28,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * AI 일정 생성 (GEN-PLAN-001).
@@ -105,19 +104,11 @@ public class ItineraryGenerationService {
         for (PlanGenerationOutput.Day day : plan.days()) {
             LocalDate date = startDate.plusDays(day.dayNumber() - 1L);
             List<VisitDraft> visits = day.placeNumbers().stream()
-                    .map(number -> VisitDraft.of(newItemId(), input.byNumber(number).placeId()))
+                    .map(number -> VisitDraft.of(ItineraryItemId.newId(), input.byNumber(number).placeId()))
                     .toList();
             days.add(new DayDraft(date, visits));
         }
         return new ItineraryDraft(days);
-    }
-
-    /*
-     * 일정 항목 ID. 좋아요·댓글이 이 값을 기준으로 달려서, 나중에 일정을 고쳐도 그대로인 장소는 같은 ID를 유지해야 한다.
-     * DB가 매기는 번호를 쓰면 저장할 때마다 바뀌므로 여기서 만들어 둔다.
-     */
-    private static String newItemId() {
-        return "v-" + UUID.randomUUID().toString().substring(0, 8);
     }
 
     private static List<String> placeIds(List<Integer> numbers, PlanGenerationInput input) {
