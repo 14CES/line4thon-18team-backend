@@ -65,6 +65,11 @@ public enum ErrorCode {
     ITINERARY_NOT_FOUND(HttpStatus.NOT_FOUND, "저장된 일정이 없습니다."),
     ITINERARY_VERSION_CONFLICT(HttpStatus.CONFLICT, "그사이 일정이 바뀌었습니다. 최신 일정을 다시 불러와 주세요."),
 
+    // ===== 확정/공유 (BE1) =====
+    ITINERARY_REQUIRED(HttpStatus.BAD_REQUEST, "확정할 일정이 없습니다. 일정을 먼저 만들어 주세요."),
+    TRIP_NOT_CONFIRMED(HttpStatus.BAD_REQUEST, "일정을 확정한 여행만 공유할 수 있습니다."),
+    SHARE_NOT_FOUND(HttpStatus.NOT_FOUND, "공유된 일정을 찾을 수 없습니다."),
+
     ; // 에러 추가는 이 위에 (각 줄은 쉼표로 끝내기)
 
     private final HttpStatus status;
