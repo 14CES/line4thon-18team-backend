@@ -60,6 +60,10 @@ public enum ErrorCode {
     INVALID_ITINERARY(HttpStatus.BAD_REQUEST, "일정 정보가 올바르지 않습니다."),
     NO_PLACES_TO_PLAN(HttpStatus.BAD_REQUEST, "일정을 만들 장소가 없습니다. 장소를 먼저 추가해 주세요."),
 
+    // ===== 일정 저장 (BE1) =====
+    ITINERARY_NOT_FOUND(HttpStatus.NOT_FOUND, "저장된 일정이 없습니다."),
+    ITINERARY_VERSION_CONFLICT(HttpStatus.CONFLICT, "그사이 일정이 바뀌었습니다. 최신 일정을 다시 불러와 주세요."),
+
     ; // 에러 추가는 이 위에 (각 줄은 쉼표로 끝내기)
 
     private final HttpStatus status;
