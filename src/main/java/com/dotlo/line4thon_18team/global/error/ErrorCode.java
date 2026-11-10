@@ -59,6 +59,7 @@ public enum ErrorCode {
     INVALID_PREFERENCE(HttpStatus.BAD_REQUEST, "취향 값이 올바르지 않습니다."),
     INVALID_ITINERARY(HttpStatus.BAD_REQUEST, "일정 정보가 올바르지 않습니다."),
     NO_PLACES_TO_PLAN(HttpStatus.BAD_REQUEST, "일정을 만들 장소가 없습니다. 장소를 먼저 추가해 주세요."),
+    STAY_REQUIRED(HttpStatus.BAD_REQUEST, "숙소를 입력하지 않은 밤이 있습니다. 비어 있는 밤의 숙소를 입력해 주세요."),
 
     ; // 에러 추가는 이 위에 (각 줄은 쉼표로 끝내기)
 
