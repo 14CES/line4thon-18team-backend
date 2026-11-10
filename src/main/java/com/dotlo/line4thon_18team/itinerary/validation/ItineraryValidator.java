@@ -215,8 +215,10 @@ public final class ItineraryValidator {
         if (straight <= policy.sameSpotMeters()) {
             return new TravelLeg(TravelMode.WALK, 0, (int) Math.round(straight), LegSource.SAME_SPOT);
         }
+        // 렌터카를 빌린 날이라도 걸어갈 거리는 걷는다. 차를 쓰는 건 걷기 기준을 넘는 구간뿐이다
+        TravelMode longLeg = trip.drivingOn(date) ? TravelMode.DRIVE : TravelMode.TRANSIT;
         TravelMode mode = straight <= policy.walkThresholdMeters(preferences.walking())
-                ? TravelMode.WALK : TravelMode.TRANSIT;
+                ? TravelMode.WALK : longLeg;
         TravelLookup lookup = TravelLookups.safe(travel,
                 new TravelQuery(from, to, mode, departAt.atZone(trip.zone())));
         if (lookup.status() == TravelLookup.Status.OK) {

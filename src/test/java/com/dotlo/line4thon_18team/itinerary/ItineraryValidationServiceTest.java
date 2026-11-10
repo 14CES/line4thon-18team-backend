@@ -2,6 +2,8 @@ package com.dotlo.line4thon_18team.itinerary;
 
 import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.itinerary.validation.model.GeoPoint;
+import com.dotlo.line4thon_18team.reservation.entity.FlightDirection;
+import com.dotlo.line4thon_18team.reservation.entity.TripFlight;
 import com.dotlo.line4thon_18team.reservation.entity.TripStay;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import org.junit.jupiter.api.Test;
@@ -60,6 +62,56 @@ class ItineraryValidationServiceTest {
         // 떠나는 날 밤은 묵지 않는다
         assertThat(ItineraryValidationService.nightlyStays(trip(), List.of(stay(DAY1, DAY4, 34.66, 135.50))))
                 .doesNotContainKey(DAY4);
+    }
+
+    @Test
+    void 가는_편은_내리는_공항_오는_편은_타는_공항을_쓴다() {
+        ItineraryValidationService.Flights flights = ItineraryValidationService.flights(List.of(
+                outbound(34.7855, 135.4382, DAY1.atTime(13, 0)),
+                inbound(34.4347, 135.2440, DAY4.atTime(15, 0))));
+
+        assertThat(flights.arrivalAirport()).isEqualTo(new GeoPoint(34.7855, 135.4382));
+        assertThat(flights.departureAirport()).isEqualTo(new GeoPoint(34.4347, 135.2440));
+        assertThat(flights.arrivalAt()).isEqualTo(DAY1.atTime(13, 0));
+        assertThat(flights.departureAt()).isEqualTo(DAY4.atTime(15, 0));
+    }
+
+    @Test
+    void 한쪽_항공편만_있으면_그_공항만_채운다() {
+        ItineraryValidationService.Flights onlyOutbound =
+                ItineraryValidationService.flights(List.of(outbound(34.7855, 135.4382, DAY1.atTime(13, 0))));
+
+        assertThat(onlyOutbound.arrivalAirport()).isNotNull();
+        assertThat(onlyOutbound.departureAirport()).isNull();
+        assertThat(onlyOutbound.departureAt()).isNull();
+    }
+
+    @Test
+    void 항공편이_없으면_전부_비어_있다() {
+        ItineraryValidationService.Flights none = ItineraryValidationService.flights(List.of());
+
+        assertThat(none.arrivalAirport()).isNull();
+        assertThat(none.departureAirport()).isNull();
+        assertThat(none.arrivalAt()).isNull();
+        assertThat(none.departureAt()).isNull();
+    }
+
+    private static TripFlight outbound(double lat, double lng, java.time.LocalDateTime arrivalAt) {
+        TripFlight flight = Mockito.mock(TripFlight.class);
+        Mockito.when(flight.getDirection()).thenReturn(FlightDirection.OUTBOUND);
+        Mockito.when(flight.getArrivalLatitude()).thenReturn(lat);
+        Mockito.when(flight.getArrivalLongitude()).thenReturn(lng);
+        Mockito.when(flight.getArrivalAt()).thenReturn(arrivalAt);
+        return flight;
+    }
+
+    private static TripFlight inbound(double lat, double lng, java.time.LocalDateTime departureAt) {
+        TripFlight flight = Mockito.mock(TripFlight.class);
+        Mockito.when(flight.getDirection()).thenReturn(FlightDirection.RETURN);
+        Mockito.when(flight.getDepartureLatitude()).thenReturn(lat);
+        Mockito.when(flight.getDepartureLongitude()).thenReturn(lng);
+        Mockito.when(flight.getDepartureAt()).thenReturn(departureAt);
+        return flight;
     }
 
     private static Trip trip() {

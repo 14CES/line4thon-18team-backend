@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface ItineraryVersionRepository extends JpaRepository<ItineraryVersion, Long> {
 
     Optional<ItineraryVersion> findFirstByTripIdOrderByVersionDesc(Long tripId);
+
+    boolean existsByTripId(Long tripId);
 }
