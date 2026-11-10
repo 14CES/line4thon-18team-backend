@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * 검증에 필요한 여행 정보 (BE1 여행, BE2 항공·숙소 데이터에서 만든다). 시각은 모두 여행지 현지 시각이다.
@@ -15,16 +16,21 @@ import java.util.Objects;
  * @param zone         여행지 시간대 (예: Asia/Tokyo). Routes API 출발 시각 계산에 쓴다
  * @param nightlyStays 그 날 "밤" 묵는 곳. 숙소를 하나도 입력하지 않았으면 비어 있다
  * @param base         숙소를 모를 때 쓰는 기준점 (도시 중심). 하루를 여기서 출발해 여기로 돌아오는 것으로 본다
- * @param airport      여행지 공항 좌표 (없으면 공항 이동시간 기본값 사용)
- * @param arrivalAt    첫날 항공 도착 시각 (없으면 첫날도 평소처럼 계산)
- * @param departureAt  마지막 날 항공 출발 시각 (없으면 마지막 날도 평소처럼 계산)
+ * @param arrivalAirport   들어오는 공항 좌표. 첫날 공항→숙소 이동에 쓴다 (없으면 기본값)
+ * @param departureAirport 나가는 공항 좌표. 마지막 날 숙소→공항 이동에 쓴다 (없으면 기본값).
+ *                         간사이로 들어와 이타미로 나가는 경우처럼 입국·출국 공항이 다를 수 있다
+ * @param rentalDays       렌터카를 빌린 날. 그 날은 먼 구간을 운전으로 본다
+ * @param arrivalAt        첫날 항공 도착 시각 (없으면 첫날도 평소처럼 계산)
+ * @param departureAt      마지막 날 항공 출발 시각 (없으면 마지막 날도 평소처럼 계산)
  */
 public record TripContext(ZoneId zone,
                           LocalDate startDate,
                           LocalDate endDate,
                           Map<LocalDate, GeoPoint> nightlyStays,
                           GeoPoint base,
-                          GeoPoint airport,
+                          GeoPoint arrivalAirport,
+                          GeoPoint departureAirport,
+                          Set<LocalDate> rentalDays,
                           LocalDateTime arrivalAt,
                           LocalDateTime departureAt) {
 
@@ -37,12 +43,14 @@ public record TripContext(ZoneId zone,
             throw new IllegalArgumentException("종료일이 시작일보다 빠릅니다: " + startDate + " ~ " + endDate);
         }
         nightlyStays = nightlyStays == null ? Map.of() : Map.copyOf(nightlyStays);
+        rentalDays = rentalDays == null ? Set.of() : Set.copyOf(rentalDays);
     }
 
-    /** 숙소를 입력하지 않은 여행. 모든 날을 base에서 출발해 base로 돌아오는 것으로 본다. */
+    /** 숙소를 입력하지 않고, 들어오고 나가는 공항이 같은 여행. */
     public static TripContext withoutStays(ZoneId zone, LocalDate startDate, LocalDate endDate, GeoPoint base,
                                            GeoPoint airport, LocalDateTime arrivalAt, LocalDateTime departureAt) {
-        return new TripContext(zone, startDate, endDate, Map.of(), base, airport, arrivalAt, departureAt);
+        return new TripContext(zone, startDate, endDate, Map.of(), base, airport, airport, Set.of(),
+                arrivalAt, departureAt);
     }
 
     /**
@@ -67,6 +75,11 @@ public record TripContext(ZoneId zone,
             return thisNight;
         }
         return nightlyStays.getOrDefault(date.minusDays(1), base);
+    }
+
+    /** 그 날 렌터카를 빌렸는지. 빌린 날은 걸어갈 거리가 아니면 운전으로 본다. */
+    public boolean drivingOn(LocalDate date) {
+        return rentalDays.contains(date);
     }
 
     public boolean covers(LocalDate date) {

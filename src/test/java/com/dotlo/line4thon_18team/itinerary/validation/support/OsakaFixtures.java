@@ -29,6 +29,8 @@ public final class OsakaFixtures {
 
     public static final GeoPoint HOTEL_NAMBA = new GeoPoint(34.6656, 135.5013);
     public static final GeoPoint KIX = new GeoPoint(34.4347, 135.2440);
+    /** 이타미 공항. 간사이와 다른 공항으로 들어오거나 나가는 경우에 쓴다 */
+    public static final GeoPoint ITAMI = new GeoPoint(34.7855, 135.4382);
     /** 난바에서 약 4.5km 북쪽 */
     public static final GeoPoint HOTEL_UMEDA = new GeoPoint(34.7055, 135.4983);
 
@@ -77,7 +79,7 @@ public final class OsakaFixtures {
     public static TripContext tripStayingAtNamba() {
         return new TripContext(ZONE, DAY1, DAY4,
                 Map.of(DAY1, HOTEL_NAMBA, DAY2, HOTEL_NAMBA, DAY3, HOTEL_NAMBA),
-                HOTEL_NAMBA, KIX, null, null);
+                HOTEL_NAMBA, KIX, KIX, Set.of(), null, null);
     }
 
     /**
@@ -87,7 +89,14 @@ public final class OsakaFixtures {
     public static TripContext tripMovingToUmeda() {
         return new TripContext(ZONE, DAY1, DAY4,
                 Map.of(DAY1, HOTEL_NAMBA, DAY2, HOTEL_NAMBA, DAY3, HOTEL_UMEDA),
-                HOTEL_NAMBA, KIX, null, null);
+                HOTEL_NAMBA, KIX, KIX, Set.of(), null, null);
+    }
+
+    /** 3박 모두 난바에 묵고, 2일차에 렌터카를 빌린 3박 4일 */
+    public static TripContext tripWithRentalOnDay2() {
+        return new TripContext(ZONE, DAY1, DAY4,
+                Map.of(DAY1, HOTEL_NAMBA, DAY2, HOTEL_NAMBA, DAY3, HOTEL_NAMBA),
+                HOTEL_NAMBA, KIX, KIX, Set.of(DAY2), null, null);
     }
 
     public static FakePlaceInfoProvider places() {
