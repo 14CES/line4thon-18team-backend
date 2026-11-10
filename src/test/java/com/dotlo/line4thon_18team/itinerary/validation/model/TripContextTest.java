@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -63,9 +64,19 @@ class TripContextTest {
         assertThat(trip.endOf(DAY2)).isEqualTo(NAMBA);
     }
 
+    @Test
+    void 렌터카를_빌린_날만_운전하는_날이다() {
+        TripContext trip = new TripContext(ZONE, DAY1, DAY4, Map.of(), CITY_CENTER,
+                null, null, Set.of(DAY2), null, null);
+
+        assertThat(trip.drivingOn(DAY2)).isTrue();
+        assertThat(trip.drivingOn(DAY1)).isFalse();
+        assertThat(trip.drivingOn(DAY3)).isFalse();
+    }
+
     private static TripContext movingToUmeda() {
         return new TripContext(ZONE, DAY1, DAY4,
                 Map.of(DAY1, NAMBA, DAY2, NAMBA, DAY3, UMEDA),
-                CITY_CENTER, null, null, null);
+                CITY_CENTER, null, null, Set.of(), null, null);
     }
 }
