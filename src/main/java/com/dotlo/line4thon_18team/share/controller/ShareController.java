@@ -32,6 +32,7 @@ public class ShareController {
             return ResponseEntity.ok(shareService.share(tripId, userId));
         } catch (DataIntegrityViolationException e) {
             // 동시에 두 번 눌러 다른 요청이 먼저 링크를 만든 경우. 실패한 트랜잭션이 끝난 뒤 새로 읽는다
+            // MySQL(InnoDB)은 뒤 insert 가 앞 트랜잭션이 끝날 때까지 기다렸다가 중복 에러를 받아서, 이 시점엔 앞 토큰이 이미 커밋돼 있다
             return ResponseEntity.ok(shareService.findShare(tripId, userId));
         }
     }

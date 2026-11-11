@@ -45,11 +45,17 @@ public class ItineraryService {
     @Transactional
     public ItineraryVersionView save(long tripId, long userId, ItinerarySource source, Integer baseVersion,
                                      ItineraryDraft draft, ValidationResult validation) {
+        return saveVersion(tripId, userId, source, baseVersion, baseVersion, draft, validation);
+    }
+
+    // expectedLatest: 저장하는 순간 최신 버전이 이 값이어야 한다 (아니면 409). null 이면 확인하지 않는다
+    private ItineraryVersionView saveVersion(long tripId, long userId, ItinerarySource source, Integer baseVersion,
+                                             Integer expectedLatest, ItineraryDraft draft, ValidationResult validation) {
         Trip trip = tripService.findOwnedTrip(userId, tripId);
         int latest = itineraryVersionRepository.findFirstByTripIdOrderByVersionDesc(tripId)
                 .map(ItineraryVersion::getVersion)
                 .orElse(0);
-        if (baseVersion != null && baseVersion != latest) {
+        if (expectedLatest != null && expectedLatest != latest) {
             throw new BusinessException(ErrorCode.ITINERARY_VERSION_CONFLICT);
         }
 
@@ -79,8 +85,11 @@ public class ItineraryService {
 
         ItineraryDraft draft = request.toDraft();
         ValidationResult validation = itineraryValidationService.validate(tripId, userId, draft, ValidationOrigin.USER_EDITED);
-        return transactionTemplate.execute(status ->
-                save(tripId, userId, ItinerarySource.MANUAL_EDIT, request.baseVersion(), draft, validation));
+        // 검증하는 수십 초 사이에 다른 저장이 들어올 수 있어서, 저장하는 순간에 다시 확인한다
+        // (baseVersion 이 없으면 "아직 일정이 없음 = 최신 0" 이어야 한다. 저장되는 baseVersion 은 그대로 null)
+        Integer expectedLatest = request.baseVersion() == null ? 0 : request.baseVersion();
+        return transactionTemplate.execute(status -> saveVersion(tripId, userId, ItinerarySource.MANUAL_EDIT,
+                request.baseVersion(), expectedLatest, draft, validation));
     }
 
     /** 최신 버전. 소유권 확인은 호출하는 쪽에서 한다. */
