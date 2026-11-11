@@ -42,7 +42,7 @@ public class ShareService {
     // 확인이 필요한 장소가 있어도 막지 않고 수만 알려준다 (FE가 안내)
     @Transactional
     public ConfirmResponse confirm(Long tripId, Long userId) {
-        Trip trip = tripService.findOwnedTrip(userId, tripId);
+        Trip trip = tripService.findMemberTrip(userId, tripId);
         ItineraryVersionView latest = itineraryService.findLatest(tripId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ITINERARY_REQUIRED));
         trip.confirm();
@@ -55,7 +55,7 @@ public class ShareService {
     // 여행마다 링크 1개. 다시 요청하면 같은 토큰을 돌려준다
     @Transactional
     public ShareResponse share(Long tripId, Long userId) {
-        Trip trip = tripService.findOwnedTrip(userId, tripId);
+        Trip trip = tripService.findMemberTrip(userId, tripId);
         if (trip.getStatus() != TripStatus.CONFIRMED) {
             throw new BusinessException(ErrorCode.TRIP_NOT_CONFIRMED);
         }
@@ -67,7 +67,7 @@ public class ShareService {
     }
 
     public ShareResponse findShare(Long tripId, Long userId) {
-        tripService.findOwnedTrip(userId, tripId);
+        tripService.findMemberTrip(userId, tripId);
         return tripShareRepository.findByTripId(tripId)
                 .map(share -> new ShareResponse(share.getToken()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.SHARE_NOT_FOUND));

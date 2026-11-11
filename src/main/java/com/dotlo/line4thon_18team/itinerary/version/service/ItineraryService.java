@@ -40,7 +40,7 @@ public class ItineraryService {
      * 일정을 새 버전으로 저장한다 (기존 버전은 지우지 않는다). draft 의 itemId 는 받은 그대로 저장한다.
      *
      * @param baseVersion 고치기 전 버전. 그사이 다른 저장이 있었으면(최신이 아니면) 409. AI 생성처럼 없으면 null
-     * @throws BusinessException 없는 여행/남의 여행(404), 버전 충돌(409)
+     * @throws BusinessException 없는 여행/구성원이 아님(404), 버전 충돌(409)
      */
     @Transactional
     public ItineraryVersionView save(long tripId, long userId, ItinerarySource source, Integer baseVersion,
@@ -51,7 +51,7 @@ public class ItineraryService {
     // expectedLatest: 저장하는 순간 최신 버전이 이 값이어야 한다 (아니면 409). null 이면 확인하지 않는다
     private ItineraryVersionView saveVersion(long tripId, long userId, ItinerarySource source, Integer baseVersion,
                                              Integer expectedLatest, ItineraryDraft draft, ValidationResult validation) {
-        Trip trip = tripService.findOwnedTrip(userId, tripId);
+        Trip trip = tripService.findMemberTrip(userId, tripId);
         int latest = itineraryVersionRepository.findFirstByTripIdOrderByVersionDesc(tripId)
                 .map(ItineraryVersion::getVersion)
                 .orElse(0);
@@ -73,11 +73,11 @@ public class ItineraryService {
      * 사용자가 직접 고친 일정 저장 API (FE). 서버가 다시 검증해서 시각을 계산한 뒤 MANUAL_EDIT 으로 저장한다.
      * 검증이 영업시간/이동시간을 외부에서 조회해서, 기다리는 동안 DB 연결을 잡지 않도록 저장할 때만 트랜잭션을 연다.
      *
-     * @throws BusinessException 없는 여행/남의 여행(404), 잘못된 일정(400), 버전 충돌(409)
+     * @throws BusinessException 없는 여행/구성원이 아님(404), 잘못된 일정(400), 버전 충돌(409)
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public ItineraryVersionView saveManualEdit(Long tripId, Long userId, ItinerarySaveRequest request) {
-        tripService.findOwnedTrip(userId, tripId);
+        tripService.findMemberTrip(userId, tripId);
         // 이미 일정이 있는데 고치기 전 버전을 모르면, 다른 사람이 고친 걸 덮어쓸 수 있어서 막는다
         if (request.baseVersion() == null && itineraryVersionRepository.existsByTripId(tripId)) {
             throw new BusinessException(ErrorCode.ITINERARY_VERSION_CONFLICT);
@@ -99,7 +99,7 @@ public class ItineraryService {
 
     // 최신 일정 조회 API (FE)
     public ItineraryVersionView getLatest(Long tripId, Long userId) {
-        tripService.findOwnedTrip(userId, tripId);   // 없는 여행/남의 여행이면 404
+        tripService.findMemberTrip(userId, tripId);   // 없는 여행/구성원이 아니면 404
         return findLatest(tripId).orElseThrow(() -> new BusinessException(ErrorCode.ITINERARY_NOT_FOUND));
     }
 
@@ -116,11 +116,11 @@ public class ItineraryService {
      * {@link #save}가 baseVersion 을 "고치기 전 최신"으로 보고 버전 충돌을 잡기 때문이다.
      * 어느 버전으로 되돌렸는지는 복원된 내용으로 알 수 있다.
      *
-     * @throws BusinessException 없는 여행/남의 여행(404), 없는 버전(404), 이미 최신(400)
+     * @throws BusinessException 없는 여행/구성원이 아님(404), 없는 버전(404), 이미 최신(400)
      */
     @Transactional
     public ItineraryVersionView revert(Long tripId, Long userId, int version) {
-        tripService.findOwnedTrip(userId, tripId);   // 없는 여행/남의 여행이면 404
+        tripService.findMemberTrip(userId, tripId);   // 없는 여행/구성원이 아니면 404
         ItineraryVersion target = itineraryVersionRepository.findByTripIdAndVersion(tripId, version)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ITINERARY_VERSION_NOT_FOUND));
         int latest = itineraryVersionRepository.findFirstByTripIdOrderByVersionDesc(tripId)
@@ -137,10 +137,10 @@ public class ItineraryService {
     /**
      * 일정 변경 이력 API (FE). 최신 버전부터 내려준다. 일정 내용과 검증 결과는 담지 않는다.
      *
-     * @throws BusinessException 없는 여행/남의 여행(404)
+     * @throws BusinessException 없는 여행/구성원이 아님(404)
      */
     public List<ItineraryVersionSummary> findHistory(Long tripId, Long userId) {
-        tripService.findOwnedTrip(userId, tripId);   // 없는 여행/남의 여행이면 404
+        tripService.findMemberTrip(userId, tripId);   // 없는 여행/구성원이 아니면 404
         return itineraryVersionRepository.findByTripIdOrderByVersionDesc(tripId).stream()
                 .map(ItineraryService::toSummary)
                 .toList();

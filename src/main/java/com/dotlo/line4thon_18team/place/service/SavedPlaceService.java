@@ -49,7 +49,7 @@ public class SavedPlaceService {
     // Takeout CSV/zip 업로드
     @Transactional
     public PlaceImportResponse uploadTakeout(Long userId, Long tripId, MultipartFile file) {
-        Trip trip = tripService.findOwnedTrip(userId, tripId);
+        Trip trip = tripService.findMemberTrip(userId, tripId);
         List<ImportedList> lists = takeoutParser.parse(file);   // 파일 문제면 여기서 400
         return saveImported(trip, lists, PlaceSource.TAKEOUT);
     }
@@ -58,13 +58,13 @@ public class SavedPlaceService {
     // 구글을 기다리는 동안(2초 정도) DB 연결을 잡지 않도록, 저장할 때만 트랜잭션을 연다
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public PlaceImportResponse importSharedList(Long userId, Long tripId, String url) {
-        tripService.findOwnedTrip(userId, tripId);   // 남의 여행이면 구글에 요청하기 전에 404
+        tripService.findMemberTrip(userId, tripId);   // 구성원이 아니면 구글에 요청하기 전에 404
         ImportedList list = googleListClient.fetch(url);
         if (list.places().isEmpty()) {
             throw new BusinessException(ErrorCode.NO_SAVED_PLACES, "리스트에 저장된 장소가 없습니다.");
         }
         return transactionTemplate.execute(status ->
-                saveImported(tripService.findOwnedTrip(userId, tripId), List.of(list), PlaceSource.SHARED_LINK));
+                saveImported(tripService.findMemberTrip(userId, tripId), List.of(list), PlaceSource.SHARED_LINK));
     }
 
     /**

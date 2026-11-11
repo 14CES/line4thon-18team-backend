@@ -63,7 +63,7 @@ public class TripService {
 
     @Transactional
     public TripResponse updateTrip(Long userId, Long tripId, TripUpdateRequest request) {
-        Trip trip = findOwnedTrip(userId, tripId);
+        Trip trip = findMemberTrip(userId, tripId);
         if (request.city() != null) {
             validateSupportedCity(request.city());
         }
@@ -74,7 +74,7 @@ public class TripService {
 
     /**
      * 내 여행을 찾고, 없거나 남의 여행이면 404 를 던진다.
-     * 장소·취향·일정 등 여행에 붙는 기능에서도 "이 사용자의 여행인지" 확인할 때 이 메서드를 쓴다.
+     * 방장만 되는 기능에서 쓴다. 여행에 붙는 기능은 구성원 모두 같은 권한이라 findMemberTrip 을 쓴다.
      */
     public Trip findOwnedTrip(Long userId, Long tripId) {
         return tripRepository.findByIdAndUserId(tripId, userId)
@@ -83,7 +83,7 @@ public class TripService {
 
     /**
      * 방장이거나 초대로 참여한 구성원이면 여행을 돌려주고, 아니면 404 를 던진다.
-     * 구성원도 같이 쓰는 기능(여행 보기, 초대, 구성원 목록)에서 쓴다.
+     * 여행에 붙는 기능(여행, 장소, 일정, 예약, 취향, 확정, 공유, 초대)에서 쓴다. 기획: 구성원 모두 같은 편집 권한
      */
     public Trip findMemberTrip(Long userId, Long tripId) {
         Trip trip = tripRepository.findById(tripId)
