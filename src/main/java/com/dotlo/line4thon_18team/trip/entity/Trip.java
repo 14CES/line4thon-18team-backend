@@ -74,6 +74,10 @@ public class Trip extends BaseTimeEntity {
         );
     }
 
+    public void confirm() {
+        this.status = TripStatus.CONFIRMED;
+    }
+
     private void apply(String city, LocalDate startDate, LocalDate endDate,
                        Companion companion, Integer companionCount) {
         if (endDate.isBefore(startDate)) {
