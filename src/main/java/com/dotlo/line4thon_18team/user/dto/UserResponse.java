@@ -9,6 +9,9 @@ public record UserResponse(
         String email,
         String name,
         String profileImageUrl,
+        String nickname,
+        String bio,
+        Integer characterId,
         LocalDateTime createdAt
 ) {
 
@@ -18,6 +21,9 @@ public record UserResponse(
                 user.getEmail(),
                 user.getName(),
                 user.getProfileImageUrl(),
+                user.getNickname(),
+                user.getBio(),
+                user.getCharacterId(),
                 user.getCreatedAt()
         );
     }

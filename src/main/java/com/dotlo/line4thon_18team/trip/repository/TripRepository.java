@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,4 +26,9 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from Trip t where t.id = :id")
     Optional<Trip> findByIdForUpdate(@Param("id") Long id);
+
+    // 내가 만든 여행과 참여한 여행 중 today 전에 끝난 여행 수 (마이: 다녀온 여행)
+    @Query("select count(t) from Trip t where t.endDate < :today and (t.user.id = :userId"
+            + " or t.id in (select m.trip.id from TripMember m where m.user.id = :userId))")
+    long countEndedMyTrips(@Param("userId") Long userId, @Param("today") LocalDate today);
 }

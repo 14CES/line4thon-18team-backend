@@ -59,7 +59,7 @@ public class InviteService {
     public InvitePreviewResponse preview(String token) {
         TripInvite invite = findValidInvite(token);
         Trip trip = invite.getTrip();
-        String inviterName = userRepository.findById(invite.getCreatedBy()).map(User::getName).orElse(null);
+        String inviterName = userRepository.findById(invite.getCreatedBy()).map(User::getDisplayName).orElse(null);
         return new InvitePreviewResponse(trip.getCity(), trip.getStartDate(), trip.getEndDate(), trip.getCompanion(),
                 inviterName, memberCount(trip), MAX_MEMBERS, savedPlaceRepository.countByTripId(trip.getId()),
                 invite.getExpiresAt());
@@ -90,11 +90,11 @@ public class InviteService {
         Trip trip = tripService.findMemberTrip(userId, tripId);
         User owner = trip.getUser();
         List<MemberResponse> members = new ArrayList<>();
-        members.add(new MemberResponse(owner.getId(), owner.getName(), owner.getProfileImageUrl(), Role.OWNER,
+        members.add(new MemberResponse(owner.getId(), owner.getDisplayName(), owner.getProfileImageUrl(), Role.OWNER,
                 owner.getId().equals(userId), trip.getCreatedAt()));
         for (TripMember member : tripMemberRepository.findAllByTripIdOrderByIdAsc(tripId)) {
             User user = member.getUser();
-            members.add(new MemberResponse(user.getId(), user.getName(), user.getProfileImageUrl(), Role.MEMBER,
+            members.add(new MemberResponse(user.getId(), user.getDisplayName(), user.getProfileImageUrl(), Role.MEMBER,
                     user.getId().equals(userId), member.getCreatedAt()));
         }
         return members;
