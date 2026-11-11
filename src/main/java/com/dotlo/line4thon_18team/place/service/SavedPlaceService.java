@@ -38,7 +38,7 @@ public class SavedPlaceService {
     private final TransactionTemplate transactionTemplate;
 
     public SavedPlaceListResponse getPlaces(Long userId, Long tripId) {
-        tripService.findOwnedTrip(userId, tripId);   // 없는 여행·남의 여행이면 404
+        tripService.findMemberTrip(userId, tripId);   // 없는 여행·구성원이 아니면 404
 
         List<SavedPlaceResponse> places = savedPlaceRepository.findAllByTripIdOrderByIdAsc(tripId).stream()
                 .map(SavedPlaceResponse::from)
@@ -114,7 +114,7 @@ public class SavedPlaceService {
 
     @Transactional
     public void deletePlace(Long userId, Long tripId, Long placeId) {
-        tripService.findOwnedTrip(userId, tripId);   // 없는 여행·남의 여행이면 404
+        tripService.findMemberTrip(userId, tripId);   // 없는 여행·구성원이 아니면 404 (구성원 모두 편집 가능)
 
         SavedPlace place = savedPlaceRepository.findById(placeId)
                 .filter(p -> p.getTrip().getId().equals(tripId))   // 다른 여행의 장소면 없는 것으로 본다
