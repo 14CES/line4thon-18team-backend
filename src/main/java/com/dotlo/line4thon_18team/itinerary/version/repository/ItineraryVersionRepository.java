@@ -16,5 +16,8 @@ public interface ItineraryVersionRepository extends JpaRepository<ItineraryVersi
     /** 되돌릴 버전 하나. */
     Optional<ItineraryVersion> findByTripIdAndVersion(Long tripId, int version);
 
+    /** 여행 삭제용. 벌크 delete 를 쓰지 않는 이유는 ItineraryTripCleanupService 주석에 있다. */
+    void deleteByTripId(Long tripId);
+
     boolean existsByTripId(Long tripId);
 }

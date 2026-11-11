@@ -15,4 +15,7 @@ public interface PreferenceRepository {
 
     /** 여행 구성원 전체의 취향 (동행자 기능 P2에서 사용). userId 오름차순. */
     List<StoredPreference> findAllByTrip(long tripId);
+
+    /** 여행 삭제용. 그 여행의 취향을 구성원 것까지 모두 지운다. */
+    void deleteByTrip(long tripId);
 }
