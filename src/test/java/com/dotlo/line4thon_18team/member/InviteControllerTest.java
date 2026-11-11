@@ -68,12 +68,12 @@ class InviteControllerTest {
     }
 
     @Test
-    void 혼자_가는_여행은_초대할_수_없다() throws Exception {
+    void 혼자_가는_여행도_초대할_수_있다() throws Exception {
         Trip solo = trips.save(Trip.create(owner, "도쿄", START, START.plusDays(1), Companion.ALONE, null));
 
         perform(post("/api/trips/{tripId}/invites", solo.getId()), owner)
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("SOLO_TRIP_NOT_INVITABLE"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").exists());
     }
 
     @Test
@@ -85,7 +85,7 @@ class InviteControllerTest {
                 .andExpect(jsonPath("$.city").value("오사카"))
                 .andExpect(jsonPath("$.inviterName").value("방장"))
                 .andExpect(jsonPath("$.memberCount").value(1))
-                .andExpect(jsonPath("$.maxMembers").value(6));
+                .andExpect(jsonPath("$.maxMembers").value(10));
     }
 
     @Test
@@ -134,7 +134,7 @@ class InviteControllerTest {
     @Test
     void 인원이_가득_차면_수락할_수_없다() throws Exception {
         String token = createInvite(owner);
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 9; i++) {
             tripMembers.save(TripMember.create(trip, users.save(newUser("member" + i, "구성원" + i))));
         }
 
