@@ -11,13 +11,14 @@ import com.dotlo.line4thon_18team.member.entity.TripMember;
 import com.dotlo.line4thon_18team.member.repository.TripInviteRepository;
 import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
 import com.dotlo.line4thon_18team.place.repository.SavedPlaceRepository;
-import com.dotlo.line4thon_18team.trip.entity.Companion;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
+import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.trip.service.TripService;
 import com.dotlo.line4thon_18team.user.entity.User;
 import com.dotlo.line4thon_18team.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
@@ -32,11 +33,12 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class InviteService {
 
-    static final int MAX_MEMBERS = 6;                       // 방장 포함 (기능 명세: 6명 TBD)
+    static final int MAX_MEMBERS = 10;                      // 방장 포함
     static final Duration VALID_FOR = Duration.ofDays(7);
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final TripService tripService;
+    private final TripRepository tripRepository;
     private final TripInviteRepository tripInviteRepository;
     private final TripMemberRepository tripMemberRepository;
     private final SavedPlaceRepository savedPlaceRepository;
@@ -46,9 +48,6 @@ public class InviteService {
     @Transactional
     public InviteResponse createInvite(Long tripId, Long userId) {
         Trip trip = tripService.findMemberTrip(userId, tripId);
-        if (trip.getCompanion() == Companion.ALONE) {
-            throw new BusinessException(ErrorCode.SOLO_TRIP_NOT_INVITABLE);
-        }
         LocalDateTime now = LocalDateTime.now();
         TripInvite invite = tripInviteRepository.findFirstByTripIdAndExpiresAtAfterOrderByExpiresAtDesc(tripId, now)
                 .orElseGet(() -> tripInviteRepository.save(
@@ -67,9 +66,13 @@ public class InviteService {
     }
 
     // 이미 구성원(방장 포함)이면 그대로 통과한다. 돌려주는 값은 들어갈 여행 id
-    @Transactional
+    // 마지막 자리에 두 명이 동시에 수락해도 넘치지 않게 여행 행을 잠근 뒤 인원을 센다
+    // 기본 격리 수준(REPEATABLE READ)은 잠그기 전 시점 기준으로 세서, 다른 수락이 커밋한 인원이 보이도록 READ_COMMITTED 로 연다
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public Long accept(String token, Long userId) {
-        Trip trip = findValidInvite(token).getTrip();
+        Long tripId = findValidInvite(token).getTrip().getId();
+        Trip trip = tripRepository.findByIdForUpdate(tripId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRIP_NOT_FOUND));
         if (tripService.isMember(trip, userId)) {
             return trip.getId();
         }
