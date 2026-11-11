@@ -68,6 +68,8 @@ public enum ErrorCode {
     // ===== 일정 저장 (BE1) =====
     ITINERARY_NOT_FOUND(HttpStatus.NOT_FOUND, "저장된 일정이 없습니다."),
     ITINERARY_VERSION_CONFLICT(HttpStatus.CONFLICT, "그사이 일정이 바뀌었습니다. 최신 일정을 다시 불러와 주세요."),
+    ITINERARY_VERSION_NOT_FOUND(HttpStatus.NOT_FOUND, "그 버전의 일정을 찾을 수 없습니다."),
+    ITINERARY_ALREADY_LATEST(HttpStatus.BAD_REQUEST, "이미 최신 일정입니다. 되돌릴 필요가 없습니다."),
 
     ; // 에러 추가는 이 위에 (각 줄은 쉼표로 끝내기)
 

@@ -13,5 +13,8 @@ public interface ItineraryVersionRepository extends JpaRepository<ItineraryVersi
     /** 변경 이력. 최신 버전부터. */
     List<ItineraryVersion> findByTripIdOrderByVersionDesc(Long tripId);
 
+    /** 되돌릴 버전 하나. */
+    Optional<ItineraryVersion> findByTripIdAndVersion(Long tripId, int version);
+
     boolean existsByTripId(Long tripId);
 }
