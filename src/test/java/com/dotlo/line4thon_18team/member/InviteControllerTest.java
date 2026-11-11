@@ -54,7 +54,9 @@ class InviteControllerTest {
     @BeforeEach
     void setUp() {
         owner = users.save(newUser("owner", "방장"));
-        friend = users.save(newUser("friend", "친구"));
+        User newFriend = newUser("friend", "친구");
+        newFriend.updateMyProfile("친구", null, 4);
+        friend = users.save(newFriend);
         trip = trips.save(Trip.create(owner, "오사카", START, START.plusDays(2), Companion.FRIEND, 3));
     }
 
@@ -105,6 +107,7 @@ class InviteControllerTest {
                 .andExpect(jsonPath("$[0].role").value("OWNER"))
                 .andExpect(jsonPath("$[0].me").value(false))
                 .andExpect(jsonPath("$[1].name").value("친구"))
+                .andExpect(jsonPath("$[1].characterId").value(4))
                 .andExpect(jsonPath("$[1].me").value(true));
     }
 
