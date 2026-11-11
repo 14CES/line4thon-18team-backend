@@ -14,6 +14,7 @@ import com.dotlo.line4thon_18team.place.PlaceCategory;
 import com.dotlo.line4thon_18team.place.entity.PlaceMatchStatus;
 import com.dotlo.line4thon_18team.place.entity.SavedPlace;
 import com.dotlo.line4thon_18team.place.repository.SavedPlaceRepository;
+import com.dotlo.line4thon_18team.share.service.ShareService;
 import com.dotlo.line4thon_18team.trip.entity.Companion;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.repository.TripRepository;
@@ -24,6 +25,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -35,6 +38,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -58,6 +62,7 @@ class ShareControllerTest {
     @Autowired TripRepository trips;
     @Autowired SavedPlaceRepository savedPlaces;
     @Autowired ItineraryService itineraryService;
+    @MockitoSpyBean ShareService shareService;
 
     private Long ownerId;
     private Long otherId;
@@ -108,6 +113,17 @@ class ShareControllerTest {
     @Test
     void 공유_링크는_다시_요청해도_같은_토큰이다() throws Exception {
         String first = confirmAndShare();
+
+        perform(post("/api/trips/{tripId}/share", tripId), ownerId)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").value(first));
+    }
+
+    @Test
+    void 공유를_동시에_눌러_저장이_겹쳐도_먼저_만든_토큰을_준다() throws Exception {
+        String first = confirmAndShare();
+        // 다른 요청이 먼저 링크를 만들어서 이 요청의 저장이 trip_id UNIQUE 에 걸린 상황
+        doThrow(new DataIntegrityViolationException("uk_trip_share_trip_id")).when(shareService).share(tripId, ownerId);
 
         perform(post("/api/trips/{tripId}/share", tripId), ownerId)
                 .andExpect(status().isOk())

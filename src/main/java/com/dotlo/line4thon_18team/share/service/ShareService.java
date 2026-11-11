@@ -59,9 +59,18 @@ public class ShareService {
         if (trip.getStatus() != TripStatus.CONFIRMED) {
             throw new BusinessException(ErrorCode.TRIP_NOT_CONFIRMED);
         }
+        // 동시에 두 번 요청하면 둘 다 없다고 보고 저장하다 trip_id UNIQUE 에 걸린다. 그때는 ShareController 가
+        // 이 트랜잭션이 끝난 뒤 findShare 로 먼저 생긴 토큰을 돌려준다
         TripShare share = tripShareRepository.findByTripId(tripId)
-                .orElseGet(() -> tripShareRepository.save(TripShare.create(trip, newToken())));
+                .orElseGet(() -> tripShareRepository.saveAndFlush(TripShare.create(trip, newToken())));
         return new ShareResponse(share.getToken());
+    }
+
+    public ShareResponse findShare(Long tripId, Long userId) {
+        tripService.findOwnedTrip(userId, tripId);
+        return tripShareRepository.findByTripId(tripId)
+                .map(share -> new ShareResponse(share.getToken()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.SHARE_NOT_FOUND));
     }
 
     // 로그인 없이 보는 화면. 최신 일정을 보여준다
