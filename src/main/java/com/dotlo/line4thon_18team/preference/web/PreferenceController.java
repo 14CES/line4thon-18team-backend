@@ -6,6 +6,7 @@ import com.dotlo.line4thon_18team.preference.PreferenceInput;
 import com.dotlo.line4thon_18team.preference.PreferenceService;
 import com.dotlo.line4thon_18team.preference.PreferenceView;
 import com.dotlo.line4thon_18team.trip.service.TripService;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -49,7 +50,13 @@ public class PreferenceController {
                                @LoginUser Long userId,
                                @RequestBody PreferenceInput input) {
         tripService.findOwnedTrip(userId, tripId);
-        return preferenceService.save(tripId, userId, input);
+        try {
+            return preferenceService.save(tripId, userId, input);
+        } catch (DataIntegrityViolationException e) {
+            // 처음 저장을 동시에 두 번 보내면 둘 다 없다고 보고 넣다가 (trip_id, user_id) 유니크에 걸린다.
+            // 실패한 트랜잭션이 끝난 뒤 다시 저장하면 먼저 생긴 줄을 고치게 된다
+            return preferenceService.save(tripId, userId, input);
+        }
     }
 
     /** 취향 조회. 저장 전이면 기본값과 saved=false. */
