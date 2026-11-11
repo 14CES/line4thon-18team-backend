@@ -20,7 +20,9 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>로컬에서는 AUTH_DEV_HEADER_ENABLED=true 일 때 토큰 대신 X-User-Id 헤더로도 호출할 수 있다.
  *
- * <p>취향은 여행에 붙는 정보라서 모든 API가 먼저 내 여행인지 확인한다 (남의 여행이면 404).
+ * <p>취향은 여행에 붙는 정보라서 모든 API가 먼저 그 여행 구성원인지 확인한다 (아니면 404).
+ * 초대를 받아 들어온 동행자도 자기 취향을 넣고 본다. 취향은 (여행, 사용자)마다 한 줄이라
+ * 자기 줄만 건드리고 남의 취향은 조회되지 않는다 (동행자 기능에서 합칠 때만 전체를 읽는다).
  * 동행자 기능이 들어오면 소유자가 아니라 구성원인지 확인하는 쪽으로 바꾼다.
  */
 @RestController
@@ -40,7 +42,7 @@ public class PreferenceController {
     public InterpretationResult analyze(@PathVariable("tripId") long tripId,
                                         @LoginUser Long userId,
                                         @RequestBody InterpretRequest request) {
-        tripService.findOwnedTrip(userId, tripId);
+        tripService.findMemberTrip(userId, tripId);
         return preferenceService.interpret(tripId, userId, request.text());
     }
 
@@ -49,7 +51,7 @@ public class PreferenceController {
     public PreferenceView save(@PathVariable("tripId") long tripId,
                                @LoginUser Long userId,
                                @RequestBody PreferenceInput input) {
-        tripService.findOwnedTrip(userId, tripId);
+        tripService.findMemberTrip(userId, tripId);
         try {
             return preferenceService.save(tripId, userId, input);
         } catch (DataIntegrityViolationException e) {
@@ -63,7 +65,7 @@ public class PreferenceController {
     @GetMapping
     public PreferenceView get(@PathVariable("tripId") long tripId,
                               @LoginUser Long userId) {
-        tripService.findOwnedTrip(userId, tripId);
+        tripService.findMemberTrip(userId, tripId);
         return preferenceService.get(tripId, userId);
     }
 }
