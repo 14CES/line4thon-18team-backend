@@ -63,10 +63,13 @@ public enum ErrorCode {
     INVALID_ITINERARY(HttpStatus.BAD_REQUEST, "일정 정보가 올바르지 않습니다."),
     NO_PLACES_TO_PLAN(HttpStatus.BAD_REQUEST, "일정을 만들 장소가 없습니다. 장소를 먼저 추가해 주세요."),
     STAY_REQUIRED(HttpStatus.BAD_REQUEST, "숙소를 입력하지 않은 밤이 있습니다. 비어 있는 밤의 숙소를 입력해 주세요."),
+    EDIT_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "적용할 수정안이 없습니다. 수정 요청을 다시 보내 주세요."),
 
     // ===== 일정 저장 (BE1) =====
     ITINERARY_NOT_FOUND(HttpStatus.NOT_FOUND, "저장된 일정이 없습니다."),
     ITINERARY_VERSION_CONFLICT(HttpStatus.CONFLICT, "그사이 일정이 바뀌었습니다. 최신 일정을 다시 불러와 주세요."),
+    ITINERARY_VERSION_NOT_FOUND(HttpStatus.NOT_FOUND, "그 버전의 일정을 찾을 수 없습니다."),
+    ITINERARY_ALREADY_LATEST(HttpStatus.BAD_REQUEST, "이미 최신 일정입니다. 되돌릴 필요가 없습니다."),
 
     // ===== 확정/공유 (BE1) =====
     ITINERARY_REQUIRED(HttpStatus.BAD_REQUEST, "확정할 일정이 없습니다. 일정을 먼저 만들어 주세요."),
