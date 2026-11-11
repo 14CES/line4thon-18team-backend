@@ -7,6 +7,7 @@ import com.dotlo.line4thon_18team.itinerary.validation.model.ItineraryDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.model.ValidationOrigin;
 import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
 import com.dotlo.line4thon_18team.itinerary.version.dto.ItinerarySaveRequest;
+import com.dotlo.line4thon_18team.itinerary.version.dto.ItineraryVersionSummary;
 import com.dotlo.line4thon_18team.itinerary.version.dto.ItineraryVersionView;
 import com.dotlo.line4thon_18team.itinerary.version.entity.ItinerarySource;
 import com.dotlo.line4thon_18team.itinerary.version.entity.ItineraryVersion;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -90,6 +92,28 @@ public class ItineraryService {
     public ItineraryVersionView getLatest(Long tripId, Long userId) {
         tripService.findOwnedTrip(userId, tripId);   // 없는 여행/남의 여행이면 404
         return findLatest(tripId).orElseThrow(() -> new BusinessException(ErrorCode.ITINERARY_NOT_FOUND));
+    }
+
+    /**
+     * 일정 변경 이력 API (FE). 최신 버전부터 내려준다. 일정 내용과 검증 결과는 담지 않는다.
+     *
+     * @throws BusinessException 없는 여행/남의 여행(404)
+     */
+    public List<ItineraryVersionSummary> findHistory(Long tripId, Long userId) {
+        tripService.findOwnedTrip(userId, tripId);   // 없는 여행/남의 여행이면 404
+        return itineraryVersionRepository.findByTripIdOrderByVersionDesc(tripId).stream()
+                .map(ItineraryService::toSummary)
+                .toList();
+    }
+
+    private static ItineraryVersionSummary toSummary(ItineraryVersion itinerary) {
+        return new ItineraryVersionSummary(
+                itinerary.getVersion(),
+                itinerary.getSource(),
+                itinerary.getBaseVersion(),
+                itinerary.getCreatedBy(),
+                itinerary.getCreatedAt()
+        );
     }
 
     private ItineraryVersionView toView(ItineraryVersion itinerary) {
