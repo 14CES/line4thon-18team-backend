@@ -123,6 +123,7 @@ class ShareControllerTest {
     void 공유를_동시에_눌러_저장이_겹쳐도_먼저_만든_토큰을_준다() throws Exception {
         String first = confirmAndShare();
         // 다른 요청이 먼저 링크를 만들어서 이 요청의 저장이 trip_id UNIQUE 에 걸린 상황
+        // share() 를 스텁해서 컨트롤러가 다시 읽는지만 본다. 실제 UNIQUE 위반 → 롤백 → 재조회 경로는 검증 범위 밖이다
         doThrow(new DataIntegrityViolationException("uk_trip_share_trip_id")).when(shareService).share(tripId, ownerId);
 
         perform(post("/api/trips/{tripId}/share", tripId), ownerId)

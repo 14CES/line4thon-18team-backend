@@ -17,4 +17,6 @@ public interface SavedPlaceRepository extends JpaRepository<SavedPlace, Long> {
     List<SavedPlace> findAllByTripIdAndMatchStatus(Long tripId, PlaceMatchStatus matchStatus);
 
     Optional<SavedPlace> findFirstByTripIdAndPlaceId(Long tripId, String placeId);
+
+    long countByTripId(Long tripId);
 }
