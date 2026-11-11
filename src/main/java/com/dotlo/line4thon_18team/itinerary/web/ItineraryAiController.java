@@ -6,6 +6,7 @@ import com.dotlo.line4thon_18team.itinerary.ItineraryEditRequestService;
 import com.dotlo.line4thon_18team.itinerary.ItineraryGenerationService;
 import com.dotlo.line4thon_18team.itinerary.edit.dto.ItineraryEditCommand;
 import com.dotlo.line4thon_18team.itinerary.edit.dto.ItineraryEditPreview;
+import com.dotlo.line4thon_18team.itinerary.version.dto.ItineraryVersionView;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -52,5 +53,19 @@ public class ItineraryAiController {
     public ItineraryEditPreview requestEdit(@PathVariable("tripId") long tripId, @LoginUser Long userId,
                                             @Valid @RequestBody ItineraryEditCommand command) {
         return editRequestService.request(tripId, userId, command.message());
+    }
+
+    /**
+     * 보관한 수정안을 새 버전으로 저장한다. 요청 바디는 없다.
+     *
+     * <p>{@code {version}}에는 고친 기준 버전(텍스트 수정 요청 응답의 baseVersion)을 보낸다.
+     * 되돌리기({@code /{version}/revert})도 같은 자리에 실제 버전 번호를 쓴다.
+     *
+     * <p>적용할 수정안이 없으면 404, 그사이 일정이 바뀌었으면 409다. 응답은 최신 일정 조회와 같은 모양이다.
+     */
+    @PostMapping("/{version}/apply")
+    public ItineraryVersionView applyEdit(@PathVariable("tripId") long tripId,
+                                          @PathVariable("version") int version, @LoginUser Long userId) {
+        return editRequestService.apply(tripId, userId, version);
     }
 }
