@@ -10,4 +10,6 @@ public interface TripShareRepository extends JpaRepository<TripShare, Long> {
     Optional<TripShare> findByTripId(Long tripId);
 
     Optional<TripShare> findByToken(String token);
+
+    void deleteByTripId(Long tripId);
 }

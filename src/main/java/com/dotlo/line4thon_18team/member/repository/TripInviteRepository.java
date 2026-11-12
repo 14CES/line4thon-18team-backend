@@ -12,4 +12,6 @@ public interface TripInviteRepository extends JpaRepository<TripInvite, Long> {
 
     // 아직 만료되지 않은 링크 (있으면 다시 쓴다)
     Optional<TripInvite> findFirstByTripIdAndExpiresAtAfterOrderByExpiresAtDesc(Long tripId, LocalDateTime now);
+
+    void deleteAllByTripId(Long tripId);
 }
