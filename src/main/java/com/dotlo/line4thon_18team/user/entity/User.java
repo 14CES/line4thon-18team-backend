@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 /**
  * 구글 로그인한 사용자
  * 사람 구분은 이메일이 아니라 googleSub로 함.(이메일은 바뀔 수 있어서)
@@ -56,6 +58,12 @@ public class User extends BaseTimeEntity {
     // 기본 캐릭터 번호 (1~10). 이미지는 FE가 번호로 보여준다
     private Integer characterId;
 
+    // 필수 약관(서비스 이용약관, 개인정보 수집 및 이용, 만 14세 이상)에 동의한 시각. null 이면 가입 전
+    private LocalDateTime termsAgreedAt;
+
+    // 위치 정보 이용(선택)에 동의한 시각. 동의하지 않았으면 null
+    private LocalDateTime locationAgreedAt;
+
     @Builder
     private User(String googleSub, String email, String name, String profileImageUrl) {
         this.googleSub = googleSub;
@@ -76,6 +84,18 @@ public class User extends BaseTimeEntity {
         this.nickname = nickname;
         this.bio = bio;
         this.characterId = characterId;
+    }
+
+    // 가입 마무리: 약관 동의 + 닉네임 + 캐릭터
+    public void completeSignup(String nickname, int characterId, boolean locationAgreed, LocalDateTime now) {
+        this.nickname = nickname;
+        this.characterId = characterId;
+        this.termsAgreedAt = now;
+        this.locationAgreedAt = locationAgreed ? now : null;
+    }
+
+    public boolean isSignupCompleted() {
+        return termsAgreedAt != null;
     }
 
     // 다른 사람에게 보이는 이름. 닉네임을 정하기 전이면 구글 이름
