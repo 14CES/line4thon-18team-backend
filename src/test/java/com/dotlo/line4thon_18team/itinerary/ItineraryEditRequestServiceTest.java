@@ -123,7 +123,7 @@ class ItineraryEditRequestServiceTest {
         Mockito.when(itineraryService.getLatest(TRIP, USER)).thenReturn(
                 new ItineraryVersionView(version, ItinerarySource.AI_GENERATED, null, USER,
                         LocalDateTime.of(2026, 12, 1, 10, 0), draft, "{}"));
-        Mockito.when(tripService.findOwnedTrip(USER, TRIP)).thenReturn(Mockito.mock(Trip.class));
+        Mockito.when(tripService.findMemberTrip(USER, TRIP)).thenReturn(Mockito.mock(Trip.class));
     }
 
     private void givenEdited(ItineraryDraft draft, String reason) {
