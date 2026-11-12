@@ -112,7 +112,7 @@ public class ItineraryGenerationService {
         }
         Trip trip = run.trip();
         int dayCount = (int) ChronoUnit.DAYS.between(trip.getStartDate(), trip.getEndDate()) + 1;
-        return PlanGenerationInput.of(trip.getCity(), dayCount, run.preferences(), candidates);
+        return PlanGenerationInput.of(trip.getCity(), dayCount, trip.getCompanion(), run.preferences(), candidates);
     }
 
     /** 장소 번호를 place ID로 되돌리고 itemId를 새로 만든다. */
