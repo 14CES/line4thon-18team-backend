@@ -11,6 +11,8 @@ import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
 import com.dotlo.line4thon_18team.itinerary.version.entity.ItinerarySource;
 import com.dotlo.line4thon_18team.itinerary.version.repository.ItineraryVersionRepository;
 import com.dotlo.line4thon_18team.itinerary.version.service.ItineraryService;
+import com.dotlo.line4thon_18team.member.entity.TripMember;
+import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
 import com.dotlo.line4thon_18team.place.OpeningHours;
 import com.dotlo.line4thon_18team.trip.entity.Companion;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
@@ -71,6 +73,7 @@ class ItineraryEditApiTest {
     @Autowired ItineraryVersionRepository itineraryVersions;
     @Autowired ItineraryEditRequestRepository editRequests;
     @Autowired ItineraryService itineraryService;
+    @Autowired TripMemberRepository tripMembers;
 
     @MockitoBean OpeningHours openingHours;
     @MockitoBean TravelTimeProvider travelTimeProvider;
@@ -78,13 +81,16 @@ class ItineraryEditApiTest {
 
     private User owner;
     private User other;
+    private User companion;
     private Trip trip;
 
     @BeforeEach
     void setUp() {
         owner = users.save(newUser());
         other = users.save(newUser());
+        companion = users.save(newUser());
         trip = trips.save(Trip.create(owner, "오사카", START, START.plusDays(1), Companion.ALONE, null));
+        tripMembers.save(TripMember.create(trip, companion));
         itineraryService.save(trip.getId(), owner.getId(), ItinerarySource.AI_GENERATED, null,
                 ItineraryDraft.of(
                         DayDraft.of(START, VisitDraft.of("v-aaa", "ChIJ-dotonbori")),
@@ -101,9 +107,11 @@ class ItineraryEditApiTest {
         itineraryVersions.deleteAll(itineraryVersions.findAll().stream()
                 .filter(itinerary -> itinerary.getTrip().getId().equals(trip.getId()))
                 .toList());
+        tripMembers.deleteAll(tripMembers.findAllByTripIdOrderByIdAsc(trip.getId()));
         trips.delete(trip);
         users.delete(owner);
         users.delete(other);
+        users.delete(companion);
     }
 
     @Test
@@ -165,6 +173,18 @@ class ItineraryEditApiTest {
     void 수정안이_없는_버전으로_적용하면_404다() throws Exception {
         apply(owner, 1).andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("EDIT_REQUEST_NOT_FOUND"));
+    }
+
+    @Test
+    void 동행자도_수정_요청과_적용을_할_수_있다() throws Exception {
+        requestEdit(companion).andExpect(status().isOk())
+                .andExpect(jsonPath("$.baseVersion").value(1))
+                .andExpect(jsonPath("$.reason").value("구로몬 시장을 뺐습니다."));
+
+        apply(companion, 1).andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.source").value("AI_EDITED"))
+                .andExpect(jsonPath("$.createdBy").value(companion.getId()));
     }
 
     @Test

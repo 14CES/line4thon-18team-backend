@@ -43,7 +43,7 @@ public class ItineraryEditRequestService {
      * <p>이 메서드에는 트랜잭션을 걸지 않는다. AI 응답과 이동시간 조회를 기다리는 동안 DB 연결을
      * 쥐고 있지 않기 위해서다. 현재 일정 조회와 수정안 저장만 각자 트랜잭션에서 한다.
      *
-     * @throws BusinessException 없는 여행·남의 여행(404), 저장된 일정이 없음(404)
+     * @throws BusinessException 없는 여행·구성원이 아닌 여행(404), 저장된 일정이 없음(404)
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public ItineraryEditPreview request(long tripId, long userId, String message) {
@@ -52,7 +52,7 @@ public class ItineraryEditRequestService {
         ItineraryDiff diff = ItineraryDiff.between(current.draft(), edited.draft());
 
         transactionTemplate.executeWithoutResult(status -> {
-            Trip trip = tripService.findOwnedTrip(userId, tripId);
+            Trip trip = tripService.findMemberTrip(userId, tripId);
             editRequestRepository.save(ItineraryEditRequest.create(trip, current.version(), message,
                     edited.reason(), userId,
                     objectMapper.writeValueAsString(edited.draft()),
@@ -73,11 +73,11 @@ public class ItineraryEditRequestService {
      *
      * @param version 고친 기준 버전. 텍스트 수정 요청 응답의 baseVersion 을 그대로 보낸다.
      *                그 버전을 고친 수정안이 여러 개면 가장 나중 것을 적용한다
-     * @throws BusinessException 없는 여행·남의 여행(404), 적용할 수정안 없음(404), 그사이 일정이 바뀜(409)
+     * @throws BusinessException 없는 여행·구성원이 아닌 여행(404), 적용할 수정안 없음(404), 그사이 일정이 바뀜(409)
      */
     @Transactional
     public ItineraryVersionView apply(long tripId, long userId, int version) {
-        tripService.findOwnedTrip(userId, tripId);
+        tripService.findMemberTrip(userId, tripId);
         ItineraryEditRequest edit = editRequestRepository
                 .findFirstByTripIdAndBaseVersionOrderByIdDesc(tripId, version)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EDIT_REQUEST_NOT_FOUND));
