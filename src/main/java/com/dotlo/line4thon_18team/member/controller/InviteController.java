@@ -5,9 +5,11 @@ import com.dotlo.line4thon_18team.member.dto.InvitePreviewResponse;
 import com.dotlo.line4thon_18team.member.dto.InviteResponse;
 import com.dotlo.line4thon_18team.member.dto.MemberResponse;
 import com.dotlo.line4thon_18team.member.service.InviteService;
+import com.dotlo.line4thon_18team.member.service.TripLeaveService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,6 +23,7 @@ import java.util.Map;
 public class InviteController {
 
     private final InviteService inviteService;
+    private final TripLeaveService tripLeaveService;
 
     // 초대 링크 생성 (구성원 누구나)
     @PostMapping("/api/trips/{tripId}/invites")
@@ -51,5 +54,11 @@ public class InviteController {
     @GetMapping("/api/trips/{tripId}/members")
     public ResponseEntity<List<MemberResponse>> getMembers(@LoginUser Long userId, @PathVariable Long tripId) {
         return ResponseEntity.ok(inviteService.getMembers(tripId, userId));
+    }
+
+    // 여행 나가기. 방장이면 가장 먼저 참여한 멤버에게 넘기고, 혼자면 여행이 지워진다
+    @DeleteMapping("/api/trips/{tripId}/members/me")
+    public ResponseEntity<Map<String, Boolean>> leave(@LoginUser Long userId, @PathVariable Long tripId) {
+        return ResponseEntity.ok(Map.of("tripDeleted", tripLeaveService.leave(tripId, userId)));
     }
 }

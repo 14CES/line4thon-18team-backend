@@ -78,6 +78,11 @@ public class Trip extends BaseTimeEntity {
         this.status = TripStatus.CONFIRMED;
     }
 
+    // 방장이 나가거나 탈퇴하면 다음 멤버가 방장이 된다
+    public void changeOwner(User owner) {
+        this.user = owner;
+    }
+
     private void apply(String city, LocalDate startDate, LocalDate endDate,
                        Companion companion, Integer companionCount) {
         if (endDate.isBefore(startDate)) {
