@@ -4,8 +4,11 @@ import com.dotlo.line4thon_18team.auth.LoginUser;
 import com.dotlo.line4thon_18team.itinerary.GeneratedItineraryVersion;
 import com.dotlo.line4thon_18team.itinerary.ItineraryEditRequestService;
 import com.dotlo.line4thon_18team.itinerary.ItineraryGenerationService;
+import com.dotlo.line4thon_18team.itinerary.ItineraryPlaceAddService;
 import com.dotlo.line4thon_18team.itinerary.edit.dto.ItineraryEditCommand;
 import com.dotlo.line4thon_18team.itinerary.edit.dto.ItineraryEditPreview;
+import com.dotlo.line4thon_18team.itinerary.edit.dto.ItineraryPlaceAddCommand;
+import com.dotlo.line4thon_18team.itinerary.edit.dto.ItineraryPlaceAddResult;
 import com.dotlo.line4thon_18team.itinerary.version.dto.ItineraryVersionView;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +31,7 @@ public class ItineraryAiController {
 
     private final ItineraryGenerationService generationService;
     private final ItineraryEditRequestService editRequestService;
+    private final ItineraryPlaceAddService placeAddService;
 
     /**
      * 저장한 장소로 일정을 만들어 새 버전으로 저장한다.
@@ -67,5 +71,20 @@ public class ItineraryAiController {
     public ItineraryVersionView applyEdit(@PathVariable("tripId") long tripId,
                                           @PathVariable("version") int version, @LoginUser Long userId) {
         return editRequestService.apply(tripId, userId, version);
+    }
+
+    /**
+     * 장소 하나를 AI가 알맞은 날·순서에 넣고 새 버전으로 저장한다. 투표 1위 장소를 일정에 넣을 때 쓴다.
+     *
+     * <p>저장 장소에 없는 장소면 서버가 구글에서 받아 담은 뒤 넣는다. 미리보기 없이 바로 저장하므로,
+     * 마음에 들지 않으면 되돌리기({@code /{version}/revert})로 되돌리면 된다.
+     *
+     * <p>저장된 일정이 없으면 404, 폐업·도시 밖 장소거나 이미 일정에 있으면 400,
+     * AI가 넣을 자리를 못 찾으면 400이다.
+     */
+    @PostMapping("/add-place")
+    public ItineraryPlaceAddResult addPlace(@PathVariable("tripId") long tripId, @LoginUser Long userId,
+                                            @Valid @RequestBody ItineraryPlaceAddCommand command) {
+        return placeAddService.add(tripId, userId, command.placeId(), command.note());
     }
 }

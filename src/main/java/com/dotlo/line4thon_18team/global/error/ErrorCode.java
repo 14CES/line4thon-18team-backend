@@ -70,6 +70,9 @@ public enum ErrorCode {
     NO_PLACES_TO_PLAN(HttpStatus.BAD_REQUEST, "일정을 만들 장소가 없습니다. 장소를 먼저 추가해 주세요."),
     STAY_REQUIRED(HttpStatus.BAD_REQUEST, "숙소를 입력하지 않은 밤이 있습니다. 비어 있는 밤의 숙소를 입력해 주세요."),
     EDIT_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "적용할 수정안이 없습니다. 수정 요청을 다시 보내 주세요."),
+    PLACE_NOT_PLANNABLE(HttpStatus.BAD_REQUEST, "이 장소는 일정에 넣을 수 없습니다."),
+    PLACE_ALREADY_IN_ITINERARY(HttpStatus.BAD_REQUEST, "이미 일정에 있는 장소입니다."),
+    PLACE_ADD_FAILED(HttpStatus.BAD_REQUEST, "장소를 넣을 자리를 찾지 못했습니다."),
 
     // ===== 일정 저장 (BE1) =====
     ITINERARY_NOT_FOUND(HttpStatus.NOT_FOUND, "저장된 일정이 없습니다."),
