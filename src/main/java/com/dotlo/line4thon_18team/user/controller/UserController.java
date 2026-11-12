@@ -6,10 +6,13 @@ import com.dotlo.line4thon_18team.user.dto.NicknameCheckResponse;
 import com.dotlo.line4thon_18team.user.dto.ProfileUpdateRequest;
 import com.dotlo.line4thon_18team.user.dto.SignupRequest;
 import com.dotlo.line4thon_18team.user.dto.UserResponse;
+import com.dotlo.line4thon_18team.user.dto.WithdrawalPreviewResponse;
 import com.dotlo.line4thon_18team.user.service.UserService;
+import com.dotlo.line4thon_18team.user.service.WithdrawalService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserService userService;
+    private final WithdrawalService withdrawalService;
 
     // 내 정보 (로그인 필요)
     @GetMapping("/me")
@@ -55,5 +59,18 @@ public class UserController {
     @GetMapping("/me/stats")
     public ResponseEntity<MyStatsResponse> getMyStats(@LoginUser Long userId) {
         return ResponseEntity.ok(userService.getMyStats(userId));
+    }
+
+    // 탈퇴 전 안내 (같이 삭제될 여행, 방장이 넘어갈 여행, 빠질 여행)
+    @GetMapping("/me/withdrawal")
+    public ResponseEntity<WithdrawalPreviewResponse> previewWithdrawal(@LoginUser Long userId) {
+        return ResponseEntity.ok(withdrawalService.preview(userId));
+    }
+
+    // 회원 탈퇴 → 204
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> withdraw(@LoginUser Long userId) {
+        withdrawalService.withdraw(userId);
+        return ResponseEntity.noContent().build();
     }
 }
