@@ -12,6 +12,7 @@ public record UserResponse(
         String nickname,
         String bio,
         Integer characterId,
+        boolean signupCompleted,
         LocalDateTime createdAt
 ) {
 
@@ -24,6 +25,7 @@ public record UserResponse(
                 user.getNickname(),
                 user.getBio(),
                 user.getCharacterId(),
+                user.isSignupCompleted(),
                 user.getCreatedAt()
         );
     }

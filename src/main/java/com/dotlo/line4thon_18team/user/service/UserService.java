@@ -7,6 +7,7 @@ import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.user.dto.MyStatsResponse;
 import com.dotlo.line4thon_18team.user.dto.NicknameCheckResponse;
 import com.dotlo.line4thon_18team.user.dto.ProfileUpdateRequest;
+import com.dotlo.line4thon_18team.user.dto.SignupRequest;
 import com.dotlo.line4thon_18team.user.dto.UserResponse;
 import com.dotlo.line4thon_18team.user.entity.User;
 import com.dotlo.line4thon_18team.user.repository.UserRepository;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.regex.Pattern;
 
 @Service
@@ -40,22 +42,29 @@ public class UserService {
         return new NicknameCheckResponse(isAvailable(userId, nickname));
     }
 
+    // 구글 로그인 다음 단계. 필수 약관 3개에 모두 동의해야 하고, 한 번만 할 수 있다
+    @Transactional
+    public UserResponse signup(Long userId, SignupRequest request) {
+        User user = findUser(userId);
+        if (user.isSignupCompleted()) {
+            throw new BusinessException(ErrorCode.ALREADY_SIGNED_UP);
+        }
+        if (!request.agreements().allRequired()) {
+            throw new BusinessException(ErrorCode.AGREEMENT_REQUIRED);
+        }
+        validateNewNickname(userId, request.nickname());
+        user.completeSignup(request.nickname(), request.characterId(), request.agreements().location(),
+                LocalDateTime.now());
+        return flushNickname(user);
+    }
+
     @Transactional
     public UserResponse updateProfile(Long userId, ProfileUpdateRequest request) {
-        validateNickname(request.nickname());
-        if (!isAvailable(userId, request.nickname())) {
-            throw new BusinessException(ErrorCode.NICKNAME_TAKEN);
-        }
+        validateNewNickname(userId, request.nickname());
         User user = findUser(userId);
         String bio = request.bio() == null || request.bio().isBlank() ? null : request.bio().trim();
         user.updateMyProfile(request.nickname(), bio, request.characterId());
-        try {
-            userRepository.flush();
-        } catch (DataIntegrityViolationException e) {
-            // 확인과 저장 사이에 다른 사람이 같은 닉네임을 먼저 저장한 경우 (nickname UNIQUE)
-            throw new BusinessException(ErrorCode.NICKNAME_TAKEN);
-        }
-        return UserResponse.from(user);
+        return flushNickname(user);
     }
 
     // 찜 기능(BE2)이 생기기 전까지 저장한 코스는 0
@@ -65,6 +74,23 @@ public class UserService {
                 savedPlaceRepository.countInMyTrips(userId),
                 0,
                 tripRepository.countEndedMyTrips(userId, LocalDate.now()));
+    }
+
+    private void validateNewNickname(Long userId, String nickname) {
+        validateNickname(nickname);
+        if (!isAvailable(userId, nickname)) {
+            throw new BusinessException(ErrorCode.NICKNAME_TAKEN);
+        }
+    }
+
+    private UserResponse flushNickname(User user) {
+        try {
+            userRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            // 확인과 저장 사이에 다른 사람이 같은 닉네임을 먼저 저장한 경우 (nickname UNIQUE)
+            throw new BusinessException(ErrorCode.NICKNAME_TAKEN);
+        }
+        return UserResponse.from(user);
     }
 
     private boolean isAvailable(Long userId, String nickname) {
