@@ -14,7 +14,10 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(
         name = "users",
-        uniqueConstraints = @UniqueConstraint(name = "uk_users_google_sub", columnNames = "google_sub")
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_users_google_sub", columnNames = "google_sub"),
+                @UniqueConstraint(name = "uk_users_nickname", columnNames = "nickname")
+        }
 )
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -42,6 +45,17 @@ public class User extends BaseTimeEntity {
     @Column(length = 64)
     private String refreshTokenHash;
 
+    // 서비스에서 보이는 이름. 가입할 때 정하고, 정하기 전에는 null (사람마다 달라야 함)
+    @Column(length = 12)
+    private String nickname;
+
+    // 한 줄 소개
+    @Column(length = 30)
+    private String bio;
+
+    // 기본 캐릭터 번호 (1~10). 이미지는 FE가 번호로 보여준다
+    private Integer characterId;
+
     @Builder
     private User(String googleSub, String email, String name, String profileImageUrl) {
         this.googleSub = googleSub;
@@ -55,6 +69,18 @@ public class User extends BaseTimeEntity {
         this.email = email;
         this.name = name;
         this.profileImageUrl = profileImageUrl;
+    }
+
+    // 마이에서 고친 프로필
+    public void updateMyProfile(String nickname, String bio, int characterId) {
+        this.nickname = nickname;
+        this.bio = bio;
+        this.characterId = characterId;
+    }
+
+    // 다른 사람에게 보이는 이름. 닉네임을 정하기 전이면 구글 이름
+    public String getDisplayName() {
+        return nickname != null ? nickname : name;
     }
 
     // 로그인·재발급할 때 새 refresh 토큰으로 교체 (이전 토큰은 더 이상 못 씀)

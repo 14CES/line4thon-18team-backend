@@ -29,6 +29,8 @@ public enum ErrorCode {
     EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "토큰이 만료되었습니다. 토큰을 재발급해 주세요."),
     LOGIN_REQUIRED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
+    INVALID_NICKNAME(HttpStatus.BAD_REQUEST, "한글, 영문, 숫자 2~12자로 쓸 수 있어요."),
+    NICKNAME_TAKEN(HttpStatus.CONFLICT, "이미 다른 사람이 쓰고 있는 닉네임이에요."),
 
     // ===== 여행 (BE1) =====
     TRIP_NOT_FOUND(HttpStatus.NOT_FOUND, "여행을 찾을 수 없습니다."),
