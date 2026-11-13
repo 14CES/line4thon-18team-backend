@@ -39,6 +39,7 @@ public enum ErrorCode {
     INVALID_DATE_RANGE(HttpStatus.BAD_REQUEST, "종료일이 시작일보다 빠를 수 없습니다."),
     INVALID_COMPANION_COUNT(HttpStatus.BAD_REQUEST, "동행 인원이 올바르지 않습니다. 친구·가족은 2~10명이에요."),
     UNSUPPORTED_CITY(HttpStatus.BAD_REQUEST, "지원하지 않는 도시입니다."),
+    TRIP_OWNER_ONLY(HttpStatus.FORBIDDEN, "여행 삭제는 방장만 할 수 있어요."),
 
     // ===== 장소 (BE1 / BE2) =====
     CITY_NOT_FOUND(HttpStatus.NOT_FOUND, "도시를 찾을 수 없습니다."),

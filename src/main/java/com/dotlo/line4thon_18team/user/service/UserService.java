@@ -107,6 +107,7 @@ public class UserService {
 
     private User findUser(Long userId) {
         return userRepository.findById(userId)
+                .filter(user -> !user.isWithdrawn())   // 탈퇴한 사람의 남은 토큰으로는 내 정보가 안 보이게
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     }
 }

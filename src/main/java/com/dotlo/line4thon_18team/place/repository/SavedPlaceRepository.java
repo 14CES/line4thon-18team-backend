@@ -22,6 +22,8 @@ public interface SavedPlaceRepository extends JpaRepository<SavedPlace, Long> {
 
     long countByTripId(Long tripId);
 
+    void deleteAllByTripId(Long tripId);
+
     // 내가 만든 여행과 참여한 여행의 저장 장소 수 (마이)
     @Query("select count(p) from SavedPlace p where p.trip.user.id = :userId"
             + " or p.trip.id in (select m.trip.id from TripMember m where m.user.id = :userId)")
