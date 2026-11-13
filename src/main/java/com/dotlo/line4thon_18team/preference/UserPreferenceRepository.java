@@ -13,6 +13,6 @@ public interface UserPreferenceRepository {
 
     Optional<StoredUserPreference> findByUser(long userId);
 
-    /** 회원 탈퇴용. 지금은 탈퇴 API가 없지만, 생기면 user_preferences 도 같이 지워야 한다. */
+    /** 회원 탈퇴용. 여행별 취향은 {@link PreferenceRepository#deleteByUser} 쪽이다. */
     void deleteByUser(long userId);
 }

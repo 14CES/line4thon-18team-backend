@@ -37,4 +37,9 @@ public class InMemoryPreferenceRepository implements PreferenceRepository {
     public void deleteByTrip(long tripId) {
         store.keySet().removeIf(key -> key.tripId() == tripId);
     }
+
+    @Override
+    public void deleteByUser(long userId) {
+        store.keySet().removeIf(key -> key.userId() == userId);
+    }
 }
