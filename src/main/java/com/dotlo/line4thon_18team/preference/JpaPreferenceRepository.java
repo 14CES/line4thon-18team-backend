@@ -41,4 +41,9 @@ public class JpaPreferenceRepository implements PreferenceRepository {
     public void deleteByTrip(long tripId) {
         entities.deleteByTripId(tripId);
     }
+
+    @Override
+    public void deleteByUser(long userId) {
+        entities.deleteByUserId(userId);
+    }
 }
