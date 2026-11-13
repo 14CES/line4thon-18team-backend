@@ -9,6 +9,7 @@ import com.dotlo.line4thon_18team.itinerary.edit.dto.ItineraryEditCommand;
 import com.dotlo.line4thon_18team.itinerary.edit.dto.ItineraryEditPreview;
 import com.dotlo.line4thon_18team.itinerary.edit.dto.ItineraryPlaceAddCommand;
 import com.dotlo.line4thon_18team.itinerary.edit.dto.ItineraryPlaceAddResult;
+import com.dotlo.line4thon_18team.itinerary.edit.dto.ItineraryPlaceAddSuggestion;
 import com.dotlo.line4thon_18team.itinerary.version.dto.ItineraryVersionView;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -85,6 +86,21 @@ public class ItineraryAiController {
     @PostMapping("/add-place")
     public ItineraryPlaceAddResult addPlace(@PathVariable("tripId") long tripId, @LoginUser Long userId,
                                             @Valid @RequestBody ItineraryPlaceAddCommand command) {
-        return placeAddService.add(tripId, userId, command.placeId(), command.note());
+        return placeAddService.add(tripId, userId, command.placeId(), command.day(), command.note());
+    }
+
+    /**
+     * 장소를 어느 날에 넣을지 고르는 화면("언제 넣을까요?")에 쓸 날짜 목록과 추천 날을 돌려준다.
+     * 아직 일정을 바꾸지 않는다.
+     *
+     * <p>동선을 재야 해서 저장 장소에 담는 것까지는 여기서 한다. 그래서 폐업·도시 밖 장소는
+     * 이 단계에서 400으로 걸러진다. AI 를 부르지 않아 응답이 빠르다.
+     *
+     * <p>{@code day} 는 바디의 {@code day} 자리에 그대로 넣어 장소 넣기를 부르면 된다.
+     */
+    @PostMapping("/add-place/suggest")
+    public ItineraryPlaceAddSuggestion suggestDay(@PathVariable("tripId") long tripId, @LoginUser Long userId,
+                                                  @Valid @RequestBody ItineraryPlaceAddCommand command) {
+        return placeAddService.suggest(tripId, userId, command.placeId());
     }
 }
