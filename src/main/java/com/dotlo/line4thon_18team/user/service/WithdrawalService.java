@@ -5,6 +5,7 @@ import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.member.entity.TripMember;
 import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
 import com.dotlo.line4thon_18team.member.service.TripLeaveService;
+import com.dotlo.line4thon_18team.preference.PreferenceRepository;
 import com.dotlo.line4thon_18team.preference.UserPreferenceRepository;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.repository.TripRepository;
@@ -36,6 +37,7 @@ public class WithdrawalService {
     private final TripMemberRepository tripMemberRepository;
     private final TripLeaveService tripLeaveService;
     private final UserPreferenceRepository userPreferenceRepository;
+    private final PreferenceRepository preferenceRepository;
 
     public WithdrawalPreviewResponse preview(Long userId) {
         findUser(userId);
@@ -66,6 +68,7 @@ public class WithdrawalService {
             tripLeaveService.leave(tripId, userId);
         }
         userPreferenceRepository.deleteByUser(userId);
+        preferenceRepository.deleteByUser(userId);
         user.withdraw(LocalDateTime.now());
     }
 

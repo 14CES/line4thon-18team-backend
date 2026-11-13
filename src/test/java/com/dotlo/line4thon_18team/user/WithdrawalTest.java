@@ -4,6 +4,9 @@ import com.dotlo.line4thon_18team.auth.google.GoogleOAuthClient;
 import com.dotlo.line4thon_18team.auth.google.GoogleUser;
 import com.dotlo.line4thon_18team.member.entity.TripMember;
 import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
+import com.dotlo.line4thon_18team.preference.PreferenceRepository;
+import com.dotlo.line4thon_18team.preference.StoredPreference;
+import com.dotlo.line4thon_18team.preference.domain.PreferenceProfile;
 import com.dotlo.line4thon_18team.trip.entity.Companion;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.repository.TripRepository;
@@ -20,6 +23,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -46,6 +50,7 @@ class WithdrawalTest {
     @Autowired UserRepository users;
     @Autowired TripRepository trips;
     @Autowired TripMemberRepository tripMembers;
+    @Autowired PreferenceRepository preferences;
     @MockitoBean GoogleOAuthClient googleOAuthClient;
 
     private String sub;
@@ -82,6 +87,9 @@ class WithdrawalTest {
 
     @Test
     void 탈퇴하면_혼자_쓰던_여행은_지워지고_같이_쓰던_여행은_남는다() throws Exception {
+        savePreference(shared, "해산물 알레르기가 있어요");
+        savePreference(joined, "야경을 좋아해요");
+
         mvc.perform(delete("/api/users/me").header("X-User-Id", me.getId())).andExpect(status().isNoContent());
 
         assertThat(trips.findById(solo.getId())).isEmpty();
@@ -89,6 +97,9 @@ class WithdrawalTest {
                 .extracting(trip -> trip.getUser().getId()).isEqualTo(friend.getId());
         assertThat(tripMembers.countByTripId(shared.getId())).isZero();
         assertThat(tripMembers.existsByTripIdAndUserId(joined.getId(), me.getId())).isFalse();
+        // 남는 여행에 내가 쓴 여행별 취향(메모)이 남지 않는다
+        assertThat(preferences.findByTripAndUser(shared.getId(), me.getId())).isEmpty();
+        assertThat(preferences.findByTripAndUser(joined.getId(), me.getId())).isEmpty();
 
         User withdrawn = users.findById(me.getId()).orElseThrow();
         assertThat(withdrawn.isWithdrawn()).isTrue();
@@ -109,5 +120,10 @@ class WithdrawalTest {
                 .andExpect(jsonPath("$.newUser").value(true))
                 .andExpect(jsonPath("$.signupCompleted").value(false));
         assertThat(users.findByGoogleSub(sub)).get().extracting(User::getId).isNotEqualTo(me.getId());
+    }
+
+    private void savePreference(Trip trip, String rawText) {
+        preferences.save(new StoredPreference(trip.getId(), me.getId(), PreferenceProfile.defaults(), rawText,
+                Instant.now()));
     }
 }
