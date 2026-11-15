@@ -11,7 +11,6 @@ import com.dotlo.line4thon_18team.itinerary.validation.model.GeoPoint;
 import com.dotlo.line4thon_18team.itinerary.validation.model.ItineraryDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.model.VisitDraft;
 import com.dotlo.line4thon_18team.itinerary.version.dto.ItineraryVersionView;
-import com.dotlo.line4thon_18team.itinerary.version.entity.ItinerarySource;
 import com.dotlo.line4thon_18team.itinerary.version.service.ItineraryService;
 import com.dotlo.line4thon_18team.place.entity.PlaceMatchStatus;
 import com.dotlo.line4thon_18team.place.entity.SavedPlace;
@@ -121,9 +120,10 @@ public class ItineraryPlaceAddService {
         }
 
         ItineraryDiff diff = ItineraryDiff.between(current.draft(), edited.draft());
-        ItineraryVersionView saved = itineraryService.save(tripId, userId, ItinerarySource.AI_EDITED,
-                current.version(), edited.draft(), edited.validation());
-        return new ItineraryPlaceAddResult(place.getName(), edited.reason(), saved, diff);
+        String placeName = place.getName();
+        ItineraryVersionView saved = itineraryService.saveAddedPlace(tripId, userId,
+                current.version(), edited.draft(), edited.validation(), placeName);
+        return new ItineraryPlaceAddResult(placeName, edited.reason(), saved, diff);
     }
 
     /** 저장 장소에 담고, 일정에 넣을 수 있는 상태인지 본다. */

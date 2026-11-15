@@ -9,6 +9,11 @@ import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
 import com.dotlo.line4thon_18team.itinerary.version.dto.ItineraryVersionView;
 import com.dotlo.line4thon_18team.itinerary.version.entity.ItinerarySource;
 import com.dotlo.line4thon_18team.itinerary.version.service.ItineraryService;
+import com.dotlo.line4thon_18team.member.entity.TripMember;
+import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
+import com.dotlo.line4thon_18team.notification.NotificationService;
+import com.dotlo.line4thon_18team.notification.dto.NotificationResponse;
+import com.dotlo.line4thon_18team.notification.entity.NotificationType;
 import com.dotlo.line4thon_18team.trip.entity.Companion;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.repository.TripRepository;
@@ -46,9 +51,11 @@ class ItineraryServiceTest {
     private static final ValidationResult VALID = ValidationResult.of(List.of(), List.of());
 
     @Autowired ItineraryService itineraryService;
+    @Autowired NotificationService notifications;
     @Autowired MockMvc mvc;
     @Autowired UserRepository users;
     @Autowired TripRepository trips;
+    @Autowired TripMemberRepository members;
 
     private long ownerId;
     private long otherId;
@@ -86,6 +93,43 @@ class ItineraryServiceTest {
         assertThat(latest.source()).isEqualTo(ItinerarySource.AI_GENERATED);
         assertThat(latest.createdBy()).isEqualTo(ownerId);
         assertThat(latest.validation()).contains("\"summary\"");
+    }
+
+    @Test
+    void AI_초안을_저장하면_요청자와_동행자에게_알린다() {
+        members.save(TripMember.create(trips.getReferenceById(tripId), users.getReferenceById(otherId)));
+
+        ItineraryVersionView saved = itineraryService.saveAiDraft(tripId, ownerId, draft("v-aaaa0001"), VALID);
+
+        assertThat(saved.source()).isEqualTo(ItinerarySource.AI_GENERATED);
+        assertThat(saved.baseVersion()).isNull();
+        assertThat(notifications.list(ownerId).notifications()).extracting(NotificationResponse::type)
+                .containsExactly(NotificationType.AI_DRAFT_READY);
+        assertThat(notifications.list(otherId).notifications()).extracting(NotificationResponse::type)
+                .containsExactly(NotificationType.AI_DRAFT_READY);
+    }
+
+    @Test
+    void 장소를_추가한_사람은_제외하고_버전이_충돌하면_알림을_추가하지_않는다() {
+        members.save(TripMember.create(trips.getReferenceById(tripId), users.getReferenceById(otherId)));
+        ItineraryVersionView base = itineraryService.save(tripId, ownerId, ItinerarySource.AI_GENERATED, null,
+                draft("v-aaaa0001"), VALID);
+
+        ItineraryVersionView saved = itineraryService.saveAddedPlace(tripId, ownerId, base.version(),
+                draft("v-aaaa0002"), VALID, "구로몬 시장");
+        assertThat(saved.baseVersion()).isEqualTo(base.version());
+        assertThat(notifications.list(ownerId).notifications()).isEmpty();
+        assertThat(notifications.list(otherId).notifications()).singleElement().satisfies(notification -> {
+            assertThat(notification.type()).isEqualTo(NotificationType.PLACE_ADDED);
+            assertThat(notification.highlight()).isEqualTo("구로몬 시장");
+            assertThat(notification.message()).contains("주인님", "구로몬 시장");
+        });
+
+        assertThatThrownBy(() -> itineraryService.saveAddedPlace(tripId, ownerId, base.version(),
+                draft("v-aaaa0003"), VALID, "오사카성"))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.ITINERARY_VERSION_CONFLICT));
+        assertThat(notifications.list(otherId).notifications()).hasSize(1);
     }
 
     @Test

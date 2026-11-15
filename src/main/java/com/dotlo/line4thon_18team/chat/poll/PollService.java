@@ -13,6 +13,8 @@ import com.dotlo.line4thon_18team.chat.poll.repository.TripPollVoteRepository;
 import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
+import com.dotlo.line4thon_18team.notification.NotificationService;
+import com.dotlo.line4thon_18team.notification.entity.NotificationType;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.trip.service.TripService;
@@ -58,6 +60,7 @@ public class PollService {
     private final TripPollVoteRepository voteRepository;
     private final UserRepository userRepository;
     private final ChatMessageService chatMessageService;
+    private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -117,7 +120,7 @@ public class PollService {
                 .filter(vote -> memberIds.contains(vote.getUserId()))
                 .toList();
         if (votes.size() == memberIds.size()) {
-            poll.close();
+            closeAndNotify(tripId, poll);
         }
         return view(poll, poll.getCandidates(), votes, memberIds.size());
     }
@@ -141,7 +144,7 @@ public class PollService {
 
         for (TripPoll poll : openPolls) {
             if (voteCounts.getOrDefault(poll.getId(), 0L) == memberIds.size()) {
-                poll.close();
+                closeAndNotify(trip.getId(), poll);
             }
         }
     }
@@ -182,6 +185,12 @@ public class PollService {
         Set<Long> memberIds = new HashSet<>(tripMemberRepository.findUserIdsByTripId(trip.getId()));
         memberIds.add(trip.getUser().getId());
         return memberIds;
+    }
+
+    private void closeAndNotify(long tripId, TripPoll poll) {
+        poll.close();
+        notificationService.notifyTripMembers(tripId, null, NotificationType.POLL_CLOSED,
+                "투표가 마감됐어요. " + poll.getQuestion(), null);
     }
 
     /** 방장은 trip_member 에 없어서 하나 더한다. */

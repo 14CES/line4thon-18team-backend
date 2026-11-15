@@ -172,15 +172,12 @@ class ItineraryGenerationServiceTest {
                           {"dayNumber": 4, "placeNumbers": []}],
                  "excluded": []}
                 """);
-        Mockito.when(itineraryService.save(Mockito.anyLong(), Mockito.anyLong(), Mockito.any(),
-                        Mockito.any(), Mockito.any(), Mockito.any()))
-                .thenAnswer(call -> savedVersion(call.getArgument(4)));
+        Mockito.when(itineraryService.saveAiDraft(Mockito.anyLong(), Mockito.anyLong(), Mockito.any(), Mockito.any()))
+                .thenAnswer(call -> savedVersion(call.getArgument(2)));
 
         GeneratedItineraryVersion result = service.generateAndSave(1L, 7L);
 
-        // 첫 생성이라 baseVersion 은 없다. 수정 반영과 달리 덮어쓸 기존 일정이 없기 때문
-        Mockito.verify(itineraryService).save(Mockito.eq(1L), Mockito.eq(7L),
-                Mockito.eq(ItinerarySource.AI_GENERATED), Mockito.isNull(), Mockito.any(), Mockito.any());
+        Mockito.verify(itineraryService).saveAiDraft(Mockito.eq(1L), Mockito.eq(7L), Mockito.any(), Mockito.any());
         assertThat(result.itinerary().version()).isEqualTo(1);
         assertThat(result.itinerary().draft().days()).hasSize(4);
     }
@@ -195,9 +192,8 @@ class ItineraryGenerationServiceTest {
                           {"dayNumber": 4, "placeNumbers": []}],
                  "excluded": [3]}
                 """);
-        Mockito.when(itineraryService.save(Mockito.anyLong(), Mockito.anyLong(), Mockito.any(),
-                        Mockito.any(), Mockito.any(), Mockito.any()))
-                .thenAnswer(call -> savedVersion(call.getArgument(4)));
+        Mockito.when(itineraryService.saveAiDraft(Mockito.anyLong(), Mockito.anyLong(), Mockito.any(), Mockito.any()))
+                .thenAnswer(call -> savedVersion(call.getArgument(2)));
 
         GeneratedItineraryVersion result = service.generateAndSave(1L, 7L);
 
