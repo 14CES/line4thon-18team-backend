@@ -13,7 +13,6 @@ import com.dotlo.line4thon_18team.itinerary.validation.model.ValidationOrigin;
 import com.dotlo.line4thon_18team.itinerary.validation.model.VisitDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
 import com.dotlo.line4thon_18team.itinerary.version.dto.ItineraryVersionView;
-import com.dotlo.line4thon_18team.itinerary.version.entity.ItinerarySource;
 import com.dotlo.line4thon_18team.itinerary.version.service.ItineraryService;
 import com.dotlo.line4thon_18team.place.entity.PlaceMatchStatus;
 import com.dotlo.line4thon_18team.place.entity.SavedPlace;
@@ -65,7 +64,7 @@ public class ItineraryGenerationService {
      */
     public GeneratedItineraryVersion generateAndSave(long tripId, long userId) {
         GeneratedItinerary generated = generate(tripId, userId);
-        ItineraryVersionView saved = itineraryService.save(tripId, userId, ItinerarySource.AI_GENERATED, null,
+        ItineraryVersionView saved = itineraryService.saveAiDraft(tripId, userId,
                 generated.draft(), generated.validation());
         return new GeneratedItineraryVersion(saved, generated.excludedPlaceIds());
     }

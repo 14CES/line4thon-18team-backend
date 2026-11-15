@@ -12,11 +12,16 @@ import com.dotlo.line4thon_18team.itinerary.version.dto.ItineraryVersionView;
 import com.dotlo.line4thon_18team.itinerary.version.entity.ItinerarySource;
 import com.dotlo.line4thon_18team.itinerary.version.entity.ItineraryVersion;
 import com.dotlo.line4thon_18team.itinerary.version.repository.ItineraryVersionRepository;
+import com.dotlo.line4thon_18team.notification.NotificationService;
+import com.dotlo.line4thon_18team.notification.entity.NotificationType;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
+import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.trip.service.TripService;
+import com.dotlo.line4thon_18team.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -30,9 +35,14 @@ import java.util.Optional;
 @Transactional(readOnly = true)
 public class ItineraryService {
 
+    private static final int NOTIFICATION_HIGHLIGHT_MAX_LENGTH = 100;
+
     private final TripService tripService;
+    private final TripRepository tripRepository;
+    private final UserRepository userRepository;
     private final ItineraryVersionRepository itineraryVersionRepository;
     private final ItineraryValidationService itineraryValidationService;
+    private final NotificationService notificationService;
     private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
 
@@ -45,14 +55,44 @@ public class ItineraryService {
     @Transactional
     public ItineraryVersionView save(long tripId, long userId, ItinerarySource source, Integer baseVersion,
                                      ItineraryDraft draft, ValidationResult validation) {
-        return saveVersion(tripId, userId, source, baseVersion, baseVersion, draft, validation);
+        Trip trip = tripService.findMemberTrip(userId, tripId);
+        return saveVersion(trip, userId, source, baseVersion, baseVersion, draft, validation);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public ItineraryVersionView saveAiDraft(long tripId, long userId, ItineraryDraft draft,
+                                            ValidationResult validation) {
+        Trip trip = lockMemberTrip(tripId, userId);
+        ItineraryVersionView saved = saveVersion(trip, userId, ItinerarySource.AI_GENERATED, null, null, draft, validation);
+        notificationService.notifyTripMembers(tripId, null, NotificationType.AI_DRAFT_READY,
+                "AI 초안이 완성됐어요. 일정을 확인해 보세요", null);
+        return saved;
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public ItineraryVersionView saveAddedPlace(long tripId, long userId, int baseVersion, ItineraryDraft draft,
+                                               ValidationResult validation, String placeName) {
+        Trip trip = lockMemberTrip(tripId, userId);
+        ItineraryVersionView saved = saveVersion(trip, userId, ItinerarySource.AI_EDITED, baseVersion, baseVersion,
+                draft, validation);
+        String actorName = userRepository.getReferenceById(userId).getDisplayName();
+        String highlight = placeName.length() <= NOTIFICATION_HIGHLIGHT_MAX_LENGTH ? placeName : null;
+        notificationService.notifyTripMembers(tripId, userId, NotificationType.PLACE_ADDED,
+                "%s님이 일정에 장소를 추가했어요. %s".formatted(actorName, placeName), highlight);
+        return saved;
+    }
+
+    // 여행 나가기·삭제와 같은 잠금을 사용해 저장과 알림 사이에 구성원이 바뀌지 않게 한다.
+    private Trip lockMemberTrip(long tripId, long userId) {
+        return tripRepository.findByIdForUpdate(tripId)
+                .filter(trip -> tripService.isMember(trip, userId))
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRIP_NOT_FOUND));
     }
 
     // expectedLatest: 저장하는 순간 최신 버전이 이 값이어야 한다 (아니면 409). null 이면 확인하지 않는다
-    private ItineraryVersionView saveVersion(long tripId, long userId, ItinerarySource source, Integer baseVersion,
+    private ItineraryVersionView saveVersion(Trip trip, long userId, ItinerarySource source, Integer baseVersion,
                                              Integer expectedLatest, ItineraryDraft draft, ValidationResult validation) {
-        Trip trip = tripService.findMemberTrip(userId, tripId);
-        int latest = itineraryVersionRepository.findFirstByTripIdOrderByVersionDesc(tripId)
+        int latest = itineraryVersionRepository.findFirstByTripIdOrderByVersionDesc(trip.getId())
                 .map(ItineraryVersion::getVersion)
                 .orElse(0);
         if (expectedLatest != null && expectedLatest != latest) {
@@ -88,8 +128,11 @@ public class ItineraryService {
         // 검증하는 수십 초 사이에 다른 저장이 들어올 수 있어서, 저장하는 순간에 다시 확인한다
         // (baseVersion 이 없으면 "아직 일정이 없음 = 최신 0" 이어야 한다. 저장되는 baseVersion 은 그대로 null)
         Integer expectedLatest = request.baseVersion() == null ? 0 : request.baseVersion();
-        return transactionTemplate.execute(status -> saveVersion(tripId, userId, ItinerarySource.MANUAL_EDIT,
-                request.baseVersion(), expectedLatest, draft, validation));
+        return transactionTemplate.execute(status -> {
+            Trip trip = tripService.findMemberTrip(userId, tripId);
+            return saveVersion(trip, userId, ItinerarySource.MANUAL_EDIT,
+                    request.baseVersion(), expectedLatest, draft, validation);
+        });
     }
 
     /** 최신 버전. 소유권 확인은 호출하는 쪽에서 한다. */
