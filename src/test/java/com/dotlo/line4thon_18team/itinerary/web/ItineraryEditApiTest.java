@@ -2,6 +2,7 @@ package com.dotlo.line4thon_18team.itinerary.web;
 
 import com.dotlo.line4thon_18team.global.llm.LlmClient;
 import com.dotlo.line4thon_18team.global.llm.LlmResponse;
+import com.dotlo.line4thon_18team.itinerary.edit.entity.ItineraryEditRequest;
 import com.dotlo.line4thon_18team.itinerary.edit.repository.ItineraryEditRequestRepository;
 import com.dotlo.line4thon_18team.itinerary.validation.model.DayDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.model.ItineraryDraft;
@@ -31,11 +32,13 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -68,6 +71,7 @@ class ItineraryEditApiTest {
             """;
 
     @Autowired MockMvc mvc;
+    @Autowired ObjectMapper objectMapper;
     @Autowired UserRepository users;
     @Autowired TripRepository trips;
     @Autowired ItineraryVersionRepository itineraryVersions;
@@ -117,6 +121,7 @@ class ItineraryEditApiTest {
     @Test
     void 수정_요청하면_변경점과_이유를_주고_현재_일정은_그대로다() throws Exception {
         requestEdit(owner).andExpect(status().isOk())
+                .andExpect(jsonPath("$.editRequestId").isNumber())
                 .andExpect(jsonPath("$.baseVersion").value(1))
                 .andExpect(jsonPath("$.reason").value("구로몬 시장을 뺐습니다."))
                 .andExpect(jsonPath("$.itinerary.draft.days.length()").value(2))
@@ -139,9 +144,9 @@ class ItineraryEditApiTest {
 
     @Test
     void 적용하면_AI_EDITED_새_버전이_된다() throws Exception {
-        requestEdit(owner);
+        long editRequestId = requestEditId(owner);
 
-        apply(owner, 1).andExpect(status().isOk())
+        apply(owner, editRequestId).andExpect(status().isOk())
                 .andExpect(jsonPath("$.version").value(2))
                 .andExpect(jsonPath("$.source").value("AI_EDITED"))
                 .andExpect(jsonPath("$.baseVersion").value(1))
@@ -150,38 +155,81 @@ class ItineraryEditApiTest {
     }
 
     @Test
-    void 여러_번_요청하면_마지막_수정안이_적용된다() throws Exception {
-        requestEdit(owner);
+    void 같은_버전의_내_수정안이_여러_개면_ID로_고른_수정안을_적용한다() throws Exception {
+        long firstId = requestEditId(owner);
         aiReturns(FIRST_DAY_EMPTIED);
-        requestEdit(owner);
+        long secondId = requestEditId(owner);
 
-        apply(owner, 1).andExpect(status().isOk())
-                .andExpect(jsonPath("$.draft.days[0].visits.length()").value(0))
-                .andExpect(jsonPath("$.draft.days[1].visits[0].itemId").value("v-bbb"));
+        assertThat(secondId).isNotEqualTo(firstId);
+        applyByBaseVersion(owner, 1).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("EDIT_REQUEST_ID_REQUIRED"));
+        apply(owner, firstId).andExpect(status().isOk())
+                .andExpect(jsonPath("$.draft.days[0].visits[0].itemId").value("v-aaa"))
+                .andExpect(jsonPath("$.draft.days[1].visits.length()").value(0));
     }
 
     @Test
-    void 적용한_뒤_같은_버전으로_다시_적용하면_409다() throws Exception {
-        requestEdit(owner);
-        apply(owner, 1).andExpect(status().isOk());
+    void 다른_구성원이_수정안을_만들어도_자신이_본_수정안을_적용한다() throws Exception {
+        long ownerEditId = requestEditId(owner);
+        aiReturns(FIRST_DAY_EMPTIED);
+        long companionEditId = requestEditId(companion);
 
-        apply(owner, 1).andExpect(status().isConflict())
+        apply(companion, ownerEditId).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("EDIT_REQUEST_NOT_FOUND"));
+        apply(other, ownerEditId).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TRIP_NOT_FOUND"));
+        apply(owner, ownerEditId).andExpect(status().isOk())
+                .andExpect(jsonPath("$.draft.days[0].visits[0].itemId").value("v-aaa"))
+                .andExpect(jsonPath("$.draft.days[1].visits.length()").value(0));
+        apply(companion, companionEditId).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("ITINERARY_VERSION_CONFLICT"));
     }
 
     @Test
-    void 수정안이_없는_버전으로_적용하면_404다() throws Exception {
-        apply(owner, 1).andExpect(status().isNotFound())
+    void 구버전_클라이언트는_한_개의_본인_수정안을_적용한다() throws Exception {
+        requestEditId(owner);
+        aiReturns(FIRST_DAY_EMPTIED);
+        requestEditId(companion);
+
+        applyByBaseVersion(owner, 1).andExpect(status().isOk())
+                .andExpect(jsonPath("$.draft.days[0].visits[0].itemId").value("v-aaa"))
+                .andExpect(jsonPath("$.draft.days[1].visits.length()").value(0));
+    }
+
+    @Test
+    void 이미_적용한_수정안으로_다시_적용하면_409다() throws Exception {
+        long editRequestId = requestEditId(owner);
+        apply(owner, editRequestId).andExpect(status().isOk());
+
+        apply(owner, editRequestId).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ITINERARY_VERSION_CONFLICT"));
+    }
+
+    @Test
+    void 존재하지_않는_수정안은_404다() throws Exception {
+        apply(owner, Long.MAX_VALUE).andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("EDIT_REQUEST_NOT_FOUND"));
     }
 
     @Test
-    void 동행자도_수정_요청과_적용을_할_수_있다() throws Exception {
-        requestEdit(companion).andExpect(status().isOk())
-                .andExpect(jsonPath("$.baseVersion").value(1))
-                .andExpect(jsonPath("$.reason").value("구로몬 시장을 뺐습니다."));
+    void 자신의_다른_여행_수정안도_적용할_수_없다() throws Exception {
+        Trip otherTrip = trips.save(Trip.create(owner, "교토", START, START.plusDays(1), Companion.ALONE, null));
+        ItineraryEditRequest edit = editRequests.save(ItineraryEditRequest.create(
+                otherTrip, 1, "첫째 날 비워 주세요", "비웠습니다.", owner.getId(), "{}", "{}"));
+        try {
+            apply(owner, edit.getId()).andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("EDIT_REQUEST_NOT_FOUND"));
+        } finally {
+            editRequests.delete(edit);
+            trips.delete(otherTrip);
+        }
+    }
 
-        apply(companion, 1).andExpect(status().isOk())
+    @Test
+    void 동행자도_수정_요청과_적용을_할_수_있다() throws Exception {
+        long editRequestId = requestEditId(companion);
+
+        apply(companion, editRequestId).andExpect(status().isOk())
                 .andExpect(jsonPath("$.version").value(2))
                 .andExpect(jsonPath("$.source").value("AI_EDITED"))
                 .andExpect(jsonPath("$.createdBy").value(companion.getId()));
@@ -218,7 +266,19 @@ class ItineraryEditApiTest {
                 .content("{\"message\": \"둘째 날 하나 빼 주세요\"}"));
     }
 
-    private ResultActions apply(User user, int version) throws Exception {
+    private long requestEditId(User user) throws Exception {
+        byte[] response = requestEdit(user).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        return objectMapper.readTree(response).required("editRequestId").asLong();
+    }
+
+    private ResultActions apply(User user, long editRequestId) throws Exception {
+        return mvc.perform(post("/api/trips/{tripId}/itineraries/edit-requests/{editRequestId}/apply",
+                        trip.getId(), editRequestId)
+                .header("X-User-Id", user.getId()));
+    }
+
+    private ResultActions applyByBaseVersion(User user, int version) throws Exception {
         return mvc.perform(post("/api/trips/{tripId}/itineraries/{version}/apply", trip.getId(), version)
                 .header("X-User-Id", user.getId()));
     }

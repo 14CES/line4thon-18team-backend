@@ -19,6 +19,7 @@ import com.dotlo.line4thon_18team.trip.service.TripService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
@@ -40,6 +41,7 @@ class ItineraryEditRequestServiceTest {
 
     private static final long TRIP = 1L;
     private static final long USER = 7L;
+    private static final long EDIT_REQUEST = 15L;
     private static final String DOTONBORI = "place-dotonbori";
     private static final String KUROMON = "place-kuromon";
 
@@ -59,6 +61,7 @@ class ItineraryEditRequestServiceTest {
 
         ItineraryEditPreview preview = service.request(TRIP, USER, "둘째 날 하나 빼 주세요");
 
+        assertThat(preview.editRequestId()).isEqualTo(EDIT_REQUEST);
         assertThat(preview.baseVersion()).isEqualTo(3);
         assertThat(preview.reason()).isEqualTo("구로몬 시장을 뺐습니다.");
         assertThat(preview.itinerary().draft()).isEqualTo(secondDayEmptied());
@@ -129,6 +132,11 @@ class ItineraryEditRequestServiceTest {
     private void givenEdited(ItineraryDraft draft, String reason) {
         Mockito.when(editService.edit(Mockito.eq(TRIP), Mockito.eq(USER), Mockito.any(), Mockito.anyString()))
                 .thenReturn(new EditedItinerary(draft, ValidationResult.of(List.of(), List.of()), reason, 1));
+        Mockito.when(editRequests.save(Mockito.any(ItineraryEditRequest.class))).thenAnswer(invocation -> {
+            ItineraryEditRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", EDIT_REQUEST);
+            return saved;
+        });
     }
 
     /** 수정안 보관만 트랜잭션을 따로 여는 구조라서, 테스트에서는 콜백을 그대로 실행한다. */
