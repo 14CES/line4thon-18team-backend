@@ -10,6 +10,9 @@ import com.dotlo.line4thon_18team.itinerary.ItineraryTripCleanupService;
 import com.dotlo.line4thon_18team.member.entity.TripMember;
 import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
 import com.dotlo.line4thon_18team.member.service.TripLeaveService;
+import com.dotlo.line4thon_18team.notification.NotificationService;
+import com.dotlo.line4thon_18team.notification.dto.NotificationResponse;
+import com.dotlo.line4thon_18team.notification.entity.NotificationType;
 import com.dotlo.line4thon_18team.trip.entity.Companion;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.repository.TripRepository;
@@ -57,6 +60,7 @@ class ChatPollApiTest {
     @Autowired TripRepository trips;
     @Autowired TripMemberRepository tripMembers;
     @Autowired TripLeaveService tripLeaveService;
+    @Autowired NotificationService notifications;
     @Autowired TripPollRepository polls;
     @Autowired ItineraryTripCleanupService cleanupService;
 
@@ -105,11 +109,20 @@ class ChatPollApiTest {
         PollView poll = givenPoll();
         vote(owner, poll.pollId(), poll.candidates().get(0).id())
                 .andExpect(jsonPath("$.status").value("OPEN"));
+        assertThat(notifications.list(owner).notifications()).isEmpty();
+        assertThat(notifications.list(companion).notifications()).isEmpty();
 
         vote(companion, poll.pollId(), poll.candidates().get(0).id())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CLOSED"))
                 .andExpect(jsonPath("$.votedCount").value(2));
+        for (Long memberId : List.of(owner, companion)) {
+            assertThat(notifications.list(memberId).notifications()).singleElement().satisfies(notification -> {
+                assertThat(notification.type()).isEqualTo(NotificationType.POLL_CLOSED);
+                assertThat(notification.tripId()).isEqualTo(trip.getId());
+                assertThat(notification.message()).contains(poll.question());
+            });
+        }
     }
 
     @Test
@@ -121,6 +134,10 @@ class ChatPollApiTest {
         vote(owner, poll.pollId(), poll.candidates().get(1).id())
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("POLL_CLOSED"));
+        for (Long memberId : List.of(owner, companion)) {
+            assertThat(notifications.list(memberId).notifications()).extracting(NotificationResponse::type)
+                    .containsExactly(NotificationType.POLL_CLOSED);
+        }
     }
 
     @Test
@@ -190,6 +207,11 @@ class ChatPollApiTest {
         vote(remainingUser, poll.pollId(), poll.candidates().get(1).id())
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("POLL_CLOSED"));
+        for (Long memberId : List.of(remainingUser, thirdMember.getId())) {
+            assertThat(notifications.list(memberId).notifications()).extracting(NotificationResponse::type)
+                    .containsExactly(NotificationType.POLL_CLOSED);
+        }
+        assertThat(notifications.list(departingUser).notifications()).isEmpty();
     }
 
     @Test
