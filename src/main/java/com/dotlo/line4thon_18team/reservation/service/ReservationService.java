@@ -19,9 +19,9 @@ import com.dotlo.line4thon_18team.reservation.repository.TripFlightRepository;
 import com.dotlo.line4thon_18team.reservation.repository.TripRentalRepository;
 import com.dotlo.line4thon_18team.reservation.repository.TripStayRepository;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
+import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.trip.service.TripService;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -48,6 +48,7 @@ public class ReservationService {
     private static final Pattern FLIGHT_NUMBER = Pattern.compile("(?:[A-Za-z][A-Za-z0-9]|\\d[A-Za-z]|[A-Za-z]{3})\\d{1,4}[A-Za-z]?");
 
     private final TripService tripService;
+    private final TripRepository tripRepository;
     private final PlaceMatcher placeMatcher;
     private final FlightClient flightClient;
     private final TripFlightRepository flightRepository;
@@ -74,7 +75,7 @@ public class ReservationService {
     public ReservationResponse putFlights(Long userId, Long tripId, FlightInfo outbound, FlightInfo returnFlight) {
         tripService.findMemberTrip(userId, tripId);
         return transactionTemplate.execute(status -> {
-            Trip trip = lockTrip(tripId);
+            Trip trip = lockTrip(userId, tripId);
             flightRepository.deleteAllByTripId(tripId);
             entityManager.flush();   // 여행·방향별 1개(unique)라 새로 넣기 전에 지운 걸 먼저 반영
             if (outbound != null) flightRepository.save(TripFlight.of(trip, FlightDirection.OUTBOUND, outbound));
@@ -96,7 +97,7 @@ public class ReservationService {
         }
 
         return transactionTemplate.execute(status -> {
-            Trip trip = lockTrip(tripId);
+            Trip trip = lockTrip(userId, tripId);
             stayRepository.deleteAllByTripId(tripId);
             for (Stay s : stays) {
                 Candidate c = places.get(s.placeId());
@@ -121,7 +122,7 @@ public class ReservationService {
 
         Candidate c = place;
         return transactionTemplate.execute(status -> {
-            Trip trip = lockTrip(tripId);
+            Trip trip = lockTrip(userId, tripId);
             rentalRepository.deleteByTripId(tripId);
             entityManager.flush();   // 여행당 1개(trip_id unique)라 새로 넣기 전에 지운 걸 먼저 반영
             if (c != null) {
@@ -134,8 +135,12 @@ public class ReservationService {
     // 여행 행을 잠가서 같은 여행의 저장을 한 번에 하나씩 처리한다.
     // 안 잠그면 동시에 저장할 때 두 요청이 같은 기존 행을 지우려다 늦은 쪽이 500
     // (2026-11-08 잠금 없이 동시 2번: 숙소 15번 중 8번, 렌터카 15번 중 15번)
-    private Trip lockTrip(Long tripId) {
-        return entityManager.find(Trip.class, tripId, LockModeType.PESSIMISTIC_WRITE);
+    // 여행 삭제·나가기와 같은 여행 행 잠금을 먼저 잡고 구성원인지 다시 본다. 삭제 중에 들어오면 삭제가 끝난 뒤 404
+    // (2026-11-15 잠금 전에 확인만 하면 삭제 도중 저장이 외래키 오류로 500)
+    private Trip lockTrip(Long userId, Long tripId) {
+        return tripRepository.findByIdForUpdate(tripId)
+                .filter(trip -> tripService.isMember(trip, userId))
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRIP_NOT_FOUND));
     }
 
     // 여행 기간 안, checkIn < checkOut, 숙소끼리 밤이 겹치지 않게. 비는 밤은 괜찮다 (예약 안 한 밤)

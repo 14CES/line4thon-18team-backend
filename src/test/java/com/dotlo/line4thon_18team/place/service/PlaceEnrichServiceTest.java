@@ -23,10 +23,9 @@ import com.dotlo.line4thon_18team.place.entity.SavedPlace;
 import com.dotlo.line4thon_18team.place.repository.SavedPlaceRepository;
 import com.dotlo.line4thon_18team.trip.entity.Companion;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
+import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.trip.service.TripService;
 import com.dotlo.line4thon_18team.user.entity.User;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -45,9 +44,9 @@ class PlaceEnrichServiceTest {
     private final TripService tripService = mock(TripService.class);
     private final PlaceMatcher placeMatcher = mock(PlaceMatcher.class);
     private final SavedPlaceRepository repository = mock(SavedPlaceRepository.class);
-    private final EntityManager entityManager = mock(EntityManager.class);
-    private final PlaceEnrichService service = new PlaceEnrichService(tripService, placeMatcher, repository,
-            new TransactionTemplate(mock(PlatformTransactionManager.class)), entityManager);
+    private final TripRepository tripRepository = mock(TripRepository.class);
+    private final PlaceEnrichService service = new PlaceEnrichService(tripService, tripRepository, placeMatcher,
+            repository, new TransactionTemplate(mock(PlatformTransactionManager.class)));
     private Trip trip;
 
     @BeforeEach
@@ -57,7 +56,8 @@ class PlaceEnrichServiceTest {
                 "오사카", start, start.plusDays(2), Companion.ALONE, null);
         ReflectionTestUtils.setField(trip, "id", 7L);
         when(tripService.findMemberTrip(1L, 7L)).thenReturn(trip);
-        when(entityManager.find(Trip.class, 7L, LockModeType.PESSIMISTIC_WRITE)).thenReturn(trip);
+        when(tripRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(trip));
+        when(tripService.isMember(trip, 1L)).thenReturn(true);
     }
 
     @Test
@@ -118,7 +118,7 @@ class PlaceEnrichServiceTest {
 
         assertThat(existing.getListNames()).containsExactlyInAnyOrder("오사카 맛집", "라멘");
         verify(repository).delete(pin);
-        verify(entityManager).find(Trip.class, 7L, LockModeType.PESSIMISTIC_WRITE);   // 직접 추가와 같은 여행 잠금
+        verify(tripRepository).findByIdForUpdate(7L);   // 직접 추가·여행 삭제와 같은 여행 잠금
     }
 
     @Test

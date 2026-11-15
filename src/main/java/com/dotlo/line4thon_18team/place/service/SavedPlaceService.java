@@ -13,6 +13,7 @@ import com.dotlo.line4thon_18team.place.link.GoogleListClient;
 import com.dotlo.line4thon_18team.place.repository.SavedPlaceRepository;
 import com.dotlo.line4thon_18team.place.takeout.TakeoutParser;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
+import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.trip.service.TripService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,6 +33,7 @@ import java.util.Map;
 public class SavedPlaceService {
 
     private final TripService tripService;
+    private final TripRepository tripRepository;
     private final SavedPlaceRepository savedPlaceRepository;
     private final TakeoutParser takeoutParser;
     private final GoogleListClient googleListClient;
@@ -49,7 +51,7 @@ public class SavedPlaceService {
     // Takeout CSV/zip 업로드
     @Transactional
     public PlaceImportResponse uploadTakeout(Long userId, Long tripId, MultipartFile file) {
-        Trip trip = tripService.findMemberTrip(userId, tripId);
+        Trip trip = lockTrip(userId, tripId);
         List<ImportedList> lists = takeoutParser.parse(file);   // 파일 문제면 여기서 400
         return saveImported(trip, lists, PlaceSource.TAKEOUT);
     }
@@ -64,7 +66,7 @@ public class SavedPlaceService {
             throw new BusinessException(ErrorCode.NO_SAVED_PLACES, "리스트에 저장된 장소가 없습니다.");
         }
         return transactionTemplate.execute(status ->
-                saveImported(tripService.findMemberTrip(userId, tripId), List.of(list), PlaceSource.SHARED_LINK));
+                saveImported(lockTrip(userId, tripId), List.of(list), PlaceSource.SHARED_LINK));
     }
 
     /**
@@ -114,11 +116,19 @@ public class SavedPlaceService {
 
     @Transactional
     public void deletePlace(Long userId, Long tripId, Long placeId) {
-        tripService.findMemberTrip(userId, tripId);   // 없는 여행·구성원이 아니면 404 (구성원 모두 편집 가능)
+        lockTrip(userId, tripId);   // 없는 여행·구성원이 아니면 404 (구성원 모두 편집 가능)
 
         SavedPlace place = savedPlaceRepository.findById(placeId)
                 .filter(p -> p.getTrip().getId().equals(tripId))   // 다른 여행의 장소면 없는 것으로 본다
                 .orElseThrow(() -> new BusinessException(ErrorCode.SAVED_PLACE_NOT_FOUND));
         savedPlaceRepository.delete(place);
+    }
+
+    // 여행 삭제·나가기와 같은 여행 행 잠금을 먼저 잡고 구성원인지 다시 본다. 삭제 중에 들어오면 삭제가 끝난 뒤 404
+    // (2026-11-15 잠금 전에 확인만 하면 삭제 도중 저장이 외래키 오류로 500)
+    private Trip lockTrip(Long userId, Long tripId) {
+        return tripRepository.findByIdForUpdate(tripId)
+                .filter(trip -> tripService.isMember(trip, userId))
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRIP_NOT_FOUND));
     }
 }
