@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
+
 /**
  * 텍스트 수정 요청 (EDIT-TEXT-001). 저장된 최신 일정을 읽어 AI에게 고치게 하고, 변경점을 계산해
  * 수정안으로 보관한다. 일정으로 저장하는 것은 사용자가 적용을 누를 때(EDIT-APPLY-001) 한다.
@@ -51,15 +53,15 @@ public class ItineraryEditRequestService {
         EditedItinerary edited = editService.edit(tripId, userId, current.draft(), message);
         ItineraryDiff diff = ItineraryDiff.between(current.draft(), edited.draft());
 
-        transactionTemplate.executeWithoutResult(status -> {
+        long editRequestId = transactionTemplate.execute(status -> {
             Trip trip = tripService.findMemberTrip(userId, tripId);
-            editRequestRepository.save(ItineraryEditRequest.create(trip, current.version(), message,
+            return editRequestRepository.save(ItineraryEditRequest.create(trip, current.version(), message,
                     edited.reason(), userId,
                     objectMapper.writeValueAsString(edited.draft()),
-                    objectMapper.writeValueAsString(edited.validation())));
+                    objectMapper.writeValueAsString(edited.validation()))).getId();
         });
 
-        return new ItineraryEditPreview(current.version(), edited.reason(),
+        return new ItineraryEditPreview(editRequestId, current.version(), edited.reason(),
                 new ItineraryEditPreview.Itinerary(edited.draft(), edited.validation()), diff);
     }
 
@@ -71,17 +73,35 @@ public class ItineraryEditRequestService {
      *
      * <p>그사이 일정이 바뀌었는지는 {@link ItineraryService#save}의 기준 버전 검사가 그대로 잡는다.
      *
-     * @param version 고친 기준 버전. 텍스트 수정 요청 응답의 baseVersion 을 그대로 보낸다.
-     *                그 버전을 고친 수정안이 여러 개면 가장 나중 것을 적용한다
-     * @throws BusinessException 없는 여행·구성원이 아닌 여행(404), 적용할 수정안 없음(404), 그사이 일정이 바뀜(409)
+     * @param editRequestId 텍스트 수정 요청 응답에서 받은 본인의 수정안 ID
+     * @throws BusinessException 접근할 수 없는 여행·수정안(404), 그사이 일정이 바뀜(409)
      */
     @Transactional
-    public ItineraryVersionView apply(long tripId, long userId, int version) {
+    public ItineraryVersionView apply(long tripId, long userId, long editRequestId) {
         tripService.findMemberTrip(userId, tripId);
         ItineraryEditRequest edit = editRequestRepository
-                .findFirstByTripIdAndBaseVersionOrderByIdDesc(tripId, version)
+                .findByIdAndTripIdAndCreatedBy(editRequestId, tripId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EDIT_REQUEST_NOT_FOUND));
-        return itineraryService.save(tripId, userId, ItinerarySource.AI_EDITED, version,
+        return saveEdit(tripId, userId, edit);
+    }
+
+    /** 구버전 클라이언트는 자기 수정안을 하나로 특정할 수 있을 때만 적용한다. */
+    @Transactional
+    public ItineraryVersionView applyByBaseVersion(long tripId, long userId, int baseVersion) {
+        tripService.findMemberTrip(userId, tripId);
+        List<ItineraryEditRequest> edits = editRequestRepository
+                .findTop2ByTripIdAndBaseVersionAndCreatedBy(tripId, baseVersion, userId);
+        if (edits.isEmpty()) {
+            throw new BusinessException(ErrorCode.EDIT_REQUEST_NOT_FOUND);
+        }
+        if (edits.size() > 1) {
+            throw new BusinessException(ErrorCode.EDIT_REQUEST_ID_REQUIRED);
+        }
+        return saveEdit(tripId, userId, edits.get(0));
+    }
+
+    private ItineraryVersionView saveEdit(long tripId, long userId, ItineraryEditRequest edit) {
+        return itineraryService.save(tripId, userId, ItinerarySource.AI_EDITED, edit.getBaseVersion(),
                 objectMapper.readValue(edit.getContent(), ItineraryDraft.class),
                 objectMapper.readValue(edit.getValidation(), ValidationResult.class));
     }

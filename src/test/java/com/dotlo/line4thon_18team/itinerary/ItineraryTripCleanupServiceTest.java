@@ -56,14 +56,16 @@ class ItineraryTripCleanupServiceTest {
     private User owner;
     private Trip target;
     private Trip other;
+    private Long targetEditId;
+    private Long otherEditId;
 
     @BeforeEach
     void setUp() {
         owner = users.save(newUser());
         target = trips.save(Trip.create(owner, "오사카", START, START.plusDays(1), Companion.ALONE, null));
         other = trips.save(Trip.create(owner, "교토", START, START.plusDays(1), Companion.ALONE, null));
-        fill(target);
-        fill(other);
+        targetEditId = fill(target);
+        otherEditId = fill(other);
     }
 
     @AfterEach
@@ -79,7 +81,7 @@ class ItineraryTripCleanupServiceTest {
     void 그_여행의_일정_수정안_취향을_모두_지운다() {
         cleanupService.deleteByTrip(target.getId());
 
-        assertThat(editRequests.findFirstByTripIdAndBaseVersionOrderByIdDesc(target.getId(), 1)).isEmpty();
+        assertThat(editRequests.findById(targetEditId)).isEmpty();
         assertThat(itineraryVersions.findByTripIdOrderByVersionDesc(target.getId())).isEmpty();
         assertThat(preferences.findAllByTrip(target.getId())).isEmpty();
     }
@@ -88,7 +90,7 @@ class ItineraryTripCleanupServiceTest {
     void 다른_여행의_데이터는_건드리지_않는다() {
         cleanupService.deleteByTrip(target.getId());
 
-        assertThat(editRequests.findFirstByTripIdAndBaseVersionOrderByIdDesc(other.getId(), 1)).isPresent();
+        assertThat(editRequests.findById(otherEditId)).isPresent();
         assertThat(itineraryVersions.findByTripIdOrderByVersionDesc(other.getId())).hasSize(1);
         assertThat(preferences.findAllByTrip(other.getId())).hasSize(1);
     }
@@ -102,14 +104,15 @@ class ItineraryTripCleanupServiceTest {
     }
 
     /** 일정 버전 1개 + 수정안 1개 + 취향 1개 */
-    private void fill(Trip trip) {
+    private Long fill(Trip trip) {
         ItineraryDraft draft = ItineraryDraft.of(DayDraft.of(START, VisitDraft.of("v-aaa", "ChIJ-a")));
         ValidationResult validation = ValidationResult.of(List.of(), List.of());
         itineraryService.save(trip.getId(), owner.getId(), ItinerarySource.AI_GENERATED, null, draft, validation);
-        editRequests.save(ItineraryEditRequest.create(trip, 1, "둘째 날 하나 빼 주세요", "빼 드렸습니다.",
-                owner.getId(), "{}", "{}"));
+        ItineraryEditRequest edit = editRequests.save(ItineraryEditRequest.create(
+                trip, 1, "둘째 날 하나 빼 주세요", "빼 드렸습니다.", owner.getId(), "{}", "{}"));
         preferences.save(new StoredPreference(trip.getId(), owner.getId(), PreferenceProfile.defaults(),
                 null, Instant.parse("2026-11-28T00:00:00Z")));
+        return edit.getId();
     }
 
     private static User newUser() {

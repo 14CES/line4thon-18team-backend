@@ -48,8 +48,8 @@ public class ItineraryAiController {
     /**
      * 사용자가 적은 요청대로 AI가 저장된 최신 일정을 고쳐 수정안을 돌려준다. 아직 저장하지 않는다.
      *
-     * <p>적용은 {@code POST /itineraries/{version}/apply}로 하고, {@code {version}} 자리에 이 응답의
-     * baseVersion 을 보낸다. 적용하지 않으면 현재 일정은 그대로여서 따로 취소할 것이 없다.
+     * <p>적용은 {@code POST /itineraries/edit-requests/{editRequestId}/apply}로 하고, 경로에 이 응답의
+     * editRequestId 를 보낸다. 적용하지 않으면 현재 일정은 그대로여서 따로 취소할 것이 없다.
      *
      * <p>생성과 마찬가지로 AI 호출과 이동시간 조회가 들어가서 응답이 수십 초 걸릴 수 있다.
      * 저장된 일정이 없으면 404다.
@@ -63,15 +63,19 @@ public class ItineraryAiController {
     /**
      * 보관한 수정안을 새 버전으로 저장한다. 요청 바디는 없다.
      *
-     * <p>{@code {version}}에는 고친 기준 버전(텍스트 수정 요청 응답의 baseVersion)을 보낸다.
-     * 되돌리기({@code /{version}/revert})도 같은 자리에 실제 버전 번호를 쓴다.
-     *
-     * <p>적용할 수정안이 없으면 404, 그사이 일정이 바뀌었으면 409다. 응답은 최신 일정 조회와 같은 모양이다.
+     * <p>본인의 수정안이 없으면 404, 그사이 일정이 바뀌었으면 409다. 응답은 최신 일정 조회와 같은 모양이다.
      */
-    @PostMapping("/{version}/apply")
+    @PostMapping("/edit-requests/{editRequestId}/apply")
     public ItineraryVersionView applyEdit(@PathVariable("tripId") long tripId,
-                                          @PathVariable("version") int version, @LoginUser Long userId) {
-        return editRequestService.apply(tripId, userId, version);
+                                          @PathVariable("editRequestId") long editRequestId, @LoginUser Long userId) {
+        return editRequestService.apply(tripId, userId, editRequestId);
+    }
+
+    /** 구버전 클라이언트용. 본인의 수정안을 하나로 특정할 수 없으면 409다. */
+    @PostMapping("/{version}/apply")
+    public ItineraryVersionView applyEditByBaseVersion(@PathVariable("tripId") long tripId,
+                                                       @PathVariable("version") int version, @LoginUser Long userId) {
+        return editRequestService.applyByBaseVersion(tripId, userId, version);
     }
 
     /**
