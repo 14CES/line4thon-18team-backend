@@ -15,6 +15,8 @@ import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.user.entity.User;
 import com.dotlo.line4thon_18team.user.repository.UserRepository;
+import jakarta.persistence.EntityManager;
+import org.hibernate.SessionFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -29,6 +31,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -59,6 +62,7 @@ class ChatPollApiTest {
     @Autowired TripLeaveService tripLeaveService;
     @Autowired TripPollRepository polls;
     @Autowired ItineraryTripCleanupService cleanupService;
+    @Autowired EntityManager em;
 
     private Trip trip;
     private Long owner;
@@ -270,6 +274,35 @@ class ChatPollApiTest {
         cleanupService.deleteByTrip(trip.getId());
 
         assertThat(polls.findById(poll.pollId())).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 20, 21})
+    void 최근_투표는_최대_20개이며_후보를_한_번에_조회한다(int pollCount) {
+        List<PollView> newestFirst = new ArrayList<>();
+        for (int i = 0; i < pollCount; i++) {
+            newestFirst.add(0, givenPoll());
+        }
+        PollView newest = newestFirst.get(0);
+        newestFirst.set(0, pollService.vote(trip.getId(), owner, newest.pollId(), newest.candidates().get(1).id()));
+        em.flush();
+        em.clear();
+
+        var statistics = em.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        boolean statisticsEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        try {
+            long statementsBefore = statistics.getPrepareStatementCount();
+            long collectionFetchesBefore = statistics.getCollectionFetchCount();
+            List<PollView> result = pollService.recentPolls(trip.getId(), owner);
+
+            // 여행, 최근 투표, 후보, 구성원, 득표를 각각 한 번씩 조회한다.
+            assertThat(statistics.getPrepareStatementCount() - statementsBefore).isEqualTo(5);
+            assertThat(statistics.getCollectionFetchCount() - collectionFetchesBefore).isZero();
+            assertThat(result).containsExactlyElementsOf(newestFirst.subList(0, Math.min(pollCount, 20)));
+        } finally {
+            statistics.setStatisticsEnabled(statisticsEnabled);
+        }
     }
 
     // ---- helpers ----
