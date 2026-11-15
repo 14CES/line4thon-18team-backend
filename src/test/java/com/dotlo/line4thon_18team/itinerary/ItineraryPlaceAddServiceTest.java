@@ -110,8 +110,8 @@ class ItineraryPlaceAddServiceTest {
         service.suggest(TRIP, USER, KUROMON);
 
         Mockito.verifyNoInteractions(editService);
-        Mockito.verify(itineraryService, Mockito.never()).save(Mockito.anyLong(), Mockito.anyLong(),
-                Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any());
+        Mockito.verify(itineraryService, Mockito.never()).saveAddedPlace(Mockito.anyLong(), Mockito.anyLong(),
+                Mockito.anyInt(), Mockito.any(), Mockito.any(), Mockito.anyString());
     }
 
     @Test
@@ -147,7 +147,7 @@ class ItineraryPlaceAddServiceTest {
         assertThat(result.diff().changesOf(ItineraryDiff.ChangeKind.ADDED))
                 .extracting(ItineraryDiff.ItemChange::placeId)
                 .containsExactly(KUROMON);
-        Mockito.verify(itineraryService).save(TRIP, USER, ItinerarySource.AI_EDITED, 3, kuromonOnDay2(), VALID);
+        Mockito.verify(itineraryService).saveAddedPlace(TRIP, USER, 3, kuromonOnDay2(), VALID, "구로몬 시장");
     }
 
     @Test
@@ -172,8 +172,8 @@ class ItineraryPlaceAddServiceTest {
         assertThatThrownBy(() -> service.add(TRIP, USER, KUROMON, 2, null))
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PLACE_ADD_FAILED);
 
-        Mockito.verify(itineraryService, Mockito.never()).save(Mockito.anyLong(), Mockito.anyLong(),
-                Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any());
+        Mockito.verify(itineraryService, Mockito.never()).saveAddedPlace(Mockito.anyLong(), Mockito.anyLong(),
+                Mockito.anyInt(), Mockito.any(), Mockito.any(), Mockito.anyString());
     }
 
     @Test
@@ -256,10 +256,10 @@ class ItineraryPlaceAddServiceTest {
     }
 
     private void givenSaveReturns(int version) {
-        Mockito.when(itineraryService.save(Mockito.anyLong(), Mockito.anyLong(), Mockito.any(),
-                        Mockito.any(), Mockito.any(), Mockito.any()))
+        Mockito.when(itineraryService.saveAddedPlace(Mockito.anyLong(), Mockito.anyLong(),
+                        Mockito.anyInt(), Mockito.any(), Mockito.any(), Mockito.anyString()))
                 .thenAnswer(call -> new ItineraryVersionView(version, ItinerarySource.AI_EDITED, version - 1, USER,
-                        LocalDateTime.of(2026, 12, 1, 11, 0), call.getArgument(4), "{}"));
+                        LocalDateTime.of(2026, 12, 1, 11, 0), call.getArgument(3), "{}"));
     }
 
     private static ItineraryDraft twoDays() {
