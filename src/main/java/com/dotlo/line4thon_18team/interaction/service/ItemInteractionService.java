@@ -14,9 +14,13 @@ import com.dotlo.line4thon_18team.interaction.repository.ItemCommentRepository;
 import com.dotlo.line4thon_18team.interaction.repository.ItemLikeRepository;
 import com.dotlo.line4thon_18team.itinerary.validation.model.VisitDraft;
 import com.dotlo.line4thon_18team.itinerary.version.service.ItineraryService;
+import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
+import com.dotlo.line4thon_18team.notification.NotificationService;
+import com.dotlo.line4thon_18team.notification.entity.NotificationType;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.trip.service.TripService;
+import com.dotlo.line4thon_18team.user.entity.User;
 import com.dotlo.line4thon_18team.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,6 +32,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -44,6 +49,9 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class ItemInteractionService {
 
+    // "@" 뒤 닉네임. 닉네임에 쓸 수 있는 글자(UserService 의 닉네임 규칙)가 끊기는 곳까지 읽는다
+    private static final Pattern MENTION = Pattern.compile("@([가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9]+)");
+
     private final TripService tripService;
     private final TripRepository tripRepository;
     private final UserRepository userRepository;
@@ -51,6 +59,8 @@ public class ItemInteractionService {
     private final ItemLikeRepository itemLikes;
     private final ItemCommentRepository comments;
     private final CommentLikeRepository commentLikes;
+    private final TripMemberRepository tripMembers;
+    private final NotificationService notificationService;
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public LikeResult likeItem(Long userId, Long tripId, String itemId) {
@@ -84,7 +94,38 @@ public class ItemInteractionService {
         }
         ItemComment saved = comments.save(ItemComment.of(trip, itemId, userRepository.getReferenceById(userId),
                 content, rootId));
+        notifyMentioned(trip, userId, content);
         return CommentResponse.of(saved, 0, false);
+    }
+
+    /**
+     * 본문에 "@닉네임"으로 부른 일행에게 알린다 (나 자신은 빼고). FE 가 "@이지우 "처럼 넣는다.
+     * "@" 뒤 닉네임에 쓸 수 있는 글자가 끊기는 곳까지를 읽어서, 일행 닉네임과 정확히 같을 때만 알린다
+     * ("@민규야"는 "민규"가 아니라 "민규야"로 읽는다).
+     */
+    private void notifyMentioned(Trip trip, Long authorId, String content) {
+        Set<String> tags = MENTION.matcher(content).results()
+                .map(match -> match.group(1))
+                .collect(Collectors.toSet());
+        if (tags.isEmpty()) {
+            return;
+        }
+        List<User> people = new ArrayList<>();
+        people.add(trip.getUser());
+        tripMembers.findAllByTripIdOrderByIdAsc(trip.getId()).forEach(member -> people.add(member.getUser()));
+        List<User> mentioned = people.stream()
+                .filter(person -> tags.contains(person.getNickname()) && !person.getId().equals(authorId))
+                .toList();
+        if (mentioned.isEmpty()) {
+            return;
+        }
+        String preview = content.strip().replaceAll("\\s+", " ");
+        if (preview.length() > 40) {
+            preview = preview.substring(0, 40) + "…";
+        }
+        String message = userRepository.getReferenceById(authorId).getDisplayName() + "님이 나를 멘션했어요 \"" + preview + "\"";
+        mentioned.forEach(person -> notificationService.notifyUser(trip.getId(), person,
+                NotificationType.COMMENT_MENTION, message, null));
     }
 
     /** 쓴 사람만 지운다. 댓글을 지우면 달린 답글도 같이 지운다. 남의 댓글이면 COMMENT_NOT_FOUND. */
