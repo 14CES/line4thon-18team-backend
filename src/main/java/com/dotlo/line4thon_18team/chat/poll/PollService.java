@@ -7,6 +7,7 @@ import com.dotlo.line4thon_18team.chat.poll.entity.PollStatus;
 import com.dotlo.line4thon_18team.chat.poll.entity.TripPoll;
 import com.dotlo.line4thon_18team.chat.poll.entity.TripPollCandidate;
 import com.dotlo.line4thon_18team.chat.poll.entity.TripPollVote;
+import com.dotlo.line4thon_18team.chat.poll.repository.TripPollCandidateRepository;
 import com.dotlo.line4thon_18team.chat.poll.repository.TripPollRepository;
 import com.dotlo.line4thon_18team.chat.poll.repository.TripPollVoteRepository;
 import com.dotlo.line4thon_18team.global.error.BusinessException;
@@ -55,6 +56,7 @@ public class PollService {
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
     private final TripPollRepository pollRepository;
+    private final TripPollCandidateRepository candidateRepository;
     private final TripPollVoteRepository voteRepository;
     private final UserRepository userRepository;
     private final ChatMessageService chatMessageService;
@@ -79,7 +81,7 @@ public class PollService {
         TripPoll saved = pollRepository.save(poll);
         String payload = objectMapper.writeValueAsString(Map.of("card", Map.of("kind", "POLL", "pollId", saved.getId())));
         chatMessageService.appendAi(tripId, question, payload);
-        return view(saved, List.of(), memberCount(tripId));
+        return view(saved, saved.getCandidates(), List.of(), memberCount(tripId));
     }
 
     /**
@@ -120,7 +122,7 @@ public class PollService {
         if (votes.size() == memberIds.size()) {
             closeAndNotify(tripId, poll);
         }
-        return view(poll, votes, memberIds.size());
+        return view(poll, poll.getCandidates(), votes, memberIds.size());
     }
 
     /** 여행 행을 잠근 나가기 트랜잭션에서 구성원을 갱신한 뒤 호출한다. */
@@ -154,14 +156,21 @@ public class PollService {
         if (polls.isEmpty()) {
             return List.of();
         }
+        List<Long> pollIds = polls.stream().map(TripPoll::getId).toList();
+        Map<Long, List<TripPollCandidate>> candidatesByPoll = new LinkedHashMap<>();
+        for (TripPollCandidate candidate : candidateRepository.findByPollIdInOrderByPollIdAscSortOrderAsc(pollIds)) {
+            candidatesByPoll.computeIfAbsent(candidate.getPoll().getId(), id -> new ArrayList<>()).add(candidate);
+        }
+
         Set<Long> memberIds = currentMemberIds(trip);
         Map<Long, List<TripPollVote>> votesByPoll = new LinkedHashMap<>();
-        voteRepository.findByPollIdInOrderByIdAsc(polls.stream().map(TripPoll::getId).toList()).stream()
+        voteRepository.findByPollIdInOrderByIdAsc(pollIds).stream()
                 .filter(vote -> memberIds.contains(vote.getUserId()))
                 .forEach(vote -> votesByPoll.computeIfAbsent(vote.getPoll().getId(), id -> new ArrayList<>())
                         .add(vote));
         return polls.stream()
-                .map(poll -> view(poll, votesByPoll.getOrDefault(poll.getId(), List.of()), memberIds.size()))
+                .map(poll -> view(poll, candidatesByPoll.getOrDefault(poll.getId(), List.of()),
+                        votesByPoll.getOrDefault(poll.getId(), List.of()), memberIds.size()))
                 .toList();
     }
 
@@ -189,12 +198,13 @@ public class PollService {
         return tripMemberRepository.countByTripId(tripId) + 1;
     }
 
-    private static PollView view(TripPoll poll, List<TripPollVote> votes, long members) {
+    private static PollView view(TripPoll poll, List<TripPollCandidate> pollCandidates, List<TripPollVote> votes,
+                                 long members) {
         Map<Long, List<Long>> votersByCandidate = new LinkedHashMap<>();
         votes.forEach(vote -> votersByCandidate
                 .computeIfAbsent(vote.getCandidate().getId(), id -> new ArrayList<>())
                 .add(vote.getUserId()));
-        List<PollView.Candidate> candidates = poll.getCandidates().stream()
+        List<PollView.Candidate> candidates = pollCandidates.stream()
                 .map(candidate -> {
                     List<Long> voters = votersByCandidate.getOrDefault(candidate.getId(), List.of());
                     return new PollView.Candidate(candidate.getId(), candidate.getPlaceId(), candidate.getName(),
