@@ -5,6 +5,7 @@ import com.dotlo.line4thon_18team.chat.ChatMessageService;
 import com.dotlo.line4thon_18team.chat.dto.ChatMessageListResponse;
 import com.dotlo.line4thon_18team.chat.dto.ChatMessageResponse;
 import com.dotlo.line4thon_18team.chat.dto.ChatMessageSendRequest;
+import com.dotlo.line4thon_18team.chat.poll.PollService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 public class ChatMessageController {
 
     private final ChatMessageService chatMessageService;
+    private final PollService pollService;
 
     // 메시지 보내기. 저장된 메시지를 돌려준다
     @PostMapping
@@ -28,6 +30,8 @@ public class ChatMessageController {
     @GetMapping
     public ResponseEntity<ChatMessageListResponse> list(@LoginUser Long userId, @PathVariable Long tripId,
                                                         @RequestParam(required = false) Long after) {
-        return ResponseEntity.ok(chatMessageService.list(userId, tripId, after));
+        return ResponseEntity.ok(new ChatMessageListResponse(
+                chatMessageService.list(userId, tripId, after),
+                pollService.recentPolls(tripId, userId)));
     }
 }

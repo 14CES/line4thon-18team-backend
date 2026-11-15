@@ -1,6 +1,5 @@
 package com.dotlo.line4thon_18team.chat;
 
-import com.dotlo.line4thon_18team.chat.dto.ChatMessageListResponse;
 import com.dotlo.line4thon_18team.chat.dto.ChatMessageResponse;
 import com.dotlo.line4thon_18team.chat.entity.ChatMessage;
 import com.dotlo.line4thon_18team.chat.entity.ChatMessageType;
@@ -13,7 +12,10 @@ import com.dotlo.line4thon_18team.trip.service.TripService;
 import com.dotlo.line4thon_18team.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 /**
  * 여행 채팅방 메시지. 실시간은 폴링이다: FE 가 2~3초마다 마지막으로 받은 id 다음을 가져간다.
@@ -50,11 +52,11 @@ public class ChatMessageService {
      * after 다음 메시지를 오래된 것부터 최대 100개. after 가 없으면 처음부터.
      * 100개가 꽉 차서 오면 마지막 id 로 바로 한 번 더 부르면 된다. 구성원이 아니면 404.
      */
-    public ChatMessageListResponse list(Long userId, Long tripId, Long after) {
+    public List<ChatMessageResponse> list(Long userId, Long tripId, Long after) {
         tripService.findMemberTrip(userId, tripId);
-        return new ChatMessageListResponse(chatMessageRepository
+        return chatMessageRepository
                 .findTop100ByTripIdAndIdGreaterThanOrderByIdAsc(tripId, after == null ? 0L : after)
-                .stream().map(ChatMessageResponse::from).toList());
+                .stream().map(ChatMessageResponse::from).toList();
     }
 
     /** "○○님이 여행에 참여했어요" 같은 알림. 권한 확인은 부르는 쪽이 한다. */
@@ -71,6 +73,17 @@ public class ChatMessageService {
     @Transactional
     public ChatMessageResponse appendAi(long tripId, String text, String payloadJson) {
         return append(tripId, ChatMessageType.AI, text, payloadJson);
+    }
+
+    /** AI 응답을 기다리는 동안 요청자가 여행을 나갔을 수 있어 저장 직전에 확인한다. */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public ChatMessageResponse appendAiForMember(long tripId, long userId, String text, String payloadJson) {
+        Trip trip = lockTrip(tripId);
+        if (!tripService.isMember(trip, userId)) {
+            throw new BusinessException(ErrorCode.TRIP_NOT_FOUND);
+        }
+        ChatMessage message = ChatMessage.create(trip, null, ChatMessageType.AI, text, payloadJson);
+        return ChatMessageResponse.from(chatMessageRepository.save(message));
     }
 
     private ChatMessageResponse append(long tripId, ChatMessageType type, String text, String payloadJson) {

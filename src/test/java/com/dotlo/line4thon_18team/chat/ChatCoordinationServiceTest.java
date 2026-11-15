@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -41,7 +42,10 @@ class ChatCoordinationServiceTest {
     private final StructuredLlmExecutor llm = Mockito.mock(StructuredLlmExecutor.class);
     private final CoordinationTask task = new CoordinationTask(new SchemaLoader());
 
-    private final ChatCoordinationService service = new ChatCoordinationService(tripService, llm, task);
+    private final ChatMessageService chatMessages = Mockito.mock(ChatMessageService.class);
+    private final JsonMapper jsonMapper = JsonMapper.builder().build();
+    private final ChatCoordinationService service = new ChatCoordinationService(
+            tripService, llm, task, chatMessages, jsonMapper);
 
     private Trip trip;
 
@@ -104,6 +108,13 @@ class ChatCoordinationServiceTest {
                 .containsExactly("비용이 적은 대체 장소 찾기", "반나절만 머물고 다른 곳도 가기", "조금 더 이야기해 볼게요");
         assertThat(response.options().items()).extracting(CoordinationResponse.Item::id)
                 .containsExactly("d1", "d2", "talk-more");
+
+        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+        Mockito.verify(chatMessages).appendAiForMember(
+                Mockito.eq(TRIP), Mockito.eq(ME), Mockito.eq(response.text()), payload.capture());
+        var saved = jsonMapper.readTree(payload.getValue());
+        assertThat(saved.path("card").path("kind").asString()).isEqualTo("OPINION_SUMMARY");
+        assertThat(saved.path("options").path("items").get(2).path("id").asString()).isEqualTo("talk-more");
     }
 
     @Test

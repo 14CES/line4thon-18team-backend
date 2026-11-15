@@ -1,5 +1,6 @@
 package com.dotlo.line4thon_18team.chat.poll;
 
+import com.dotlo.line4thon_18team.chat.ChatMessageService;
 import com.dotlo.line4thon_18team.chat.poll.dto.NewCandidate;
 import com.dotlo.line4thon_18team.chat.poll.dto.PollView;
 import com.dotlo.line4thon_18team.chat.poll.repository.TripPollRepository;
@@ -51,6 +52,7 @@ class ChatPollApiTest {
 
     @Autowired MockMvc mvc;
     @Autowired PollService pollService;
+    @Autowired ChatMessageService chatMessages;
     @Autowired UserRepository users;
     @Autowired TripRepository trips;
     @Autowired TripMemberRepository tripMembers;
@@ -216,6 +218,40 @@ class ChatPollApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CLOSED"))
                 .andExpect(jsonPath("$.votedCount").value(2));
+    }
+
+    @Test
+    void 채팅에_투표_카드와_알림을_남기고_새_메시지가_없어도_투표_상태를_내려준다() throws Exception {
+        PollView poll = givenPoll();
+        long candidateId = poll.candidates().get(0).id();
+        long tripId = trip.getId();
+
+        mvc.perform(get("/api/trips/{tripId}/chat/messages", tripId).header("X-User-Id", companion))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.messages[0].type").value("AI"))
+                .andExpect(jsonPath("$.messages[0].payload.card.kind").value("POLL"))
+                .andExpect(jsonPath("$.messages[0].payload.card.pollId").value(poll.pollId()))
+                .andExpect(jsonPath("$.polls[0].pollId").value(poll.pollId()));
+
+        vote(owner, poll.pollId(), candidateId).andExpect(status().isOk());
+        vote(owner, poll.pollId(), candidateId).andExpect(status().isOk());
+        long cardId = chatMessages.list(companion, tripId, null).get(0).id();
+
+        mvc.perform(get("/api/trips/{tripId}/chat/messages", tripId)
+                        .param("after", Long.toString(cardId)).header("X-User-Id", companion))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.messages.length()").value(1))
+                .andExpect(jsonPath("$.messages[0].type").value("SYSTEM"))
+                .andExpect(jsonPath("$.messages[0].text").value("방장님이 투표했어요"))
+                .andExpect(jsonPath("$.polls[0].votedCount").value(1));
+
+        long notificationId = chatMessages.list(companion, tripId, cardId).get(0).id();
+        mvc.perform(get("/api/trips/{tripId}/chat/messages", tripId)
+                        .param("after", Long.toString(notificationId)).header("X-User-Id", companion))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.messages").isEmpty())
+                .andExpect(jsonPath("$.polls[0].pollId").value(poll.pollId()))
+                .andExpect(jsonPath("$.polls[0].votedCount").value(1));
     }
 
     @Test

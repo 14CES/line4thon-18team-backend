@@ -24,10 +24,10 @@ public class ChatAiController {
     private final ChatCoordinationService coordinationService;
 
     /**
-     * 채팅방 대화를 읽고 사람별 의견을 정리한 뒤 조율 방향을 제안한다. 아무것도 저장하지 않는다.
+     * 채팅방 대화를 읽어 사람별 의견을 정리한 뒤 조율 방향을 제안하고 AI 메시지로 남긴다.
      *
-     * <p>응답을 채팅 메시지(type=AI)의 payload 에 그대로 넣으면 된다.
-     * options 의 항목을 누르면 그 label 을 사용자 메시지로 보내고, 거기서 투표 후보 만들기로 이어진다.
+     * <p>다른 구성원은 메시지 폴링으로 조율 카드와 방향 선택지를 받는다.
+     * 고른 방향의 label 을 사람 메시지로 보내면, 거기서 투표 후보 만들기로 이어진다.
      *
      * <p>AI 호출이 들어가서 응답이 몇 초에서 수십 초 걸릴 수 있다.
      */

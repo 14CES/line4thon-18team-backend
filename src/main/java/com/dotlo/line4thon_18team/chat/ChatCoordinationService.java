@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -43,6 +44,8 @@ public class ChatCoordinationService {
     private final TripService tripService;
     private final StructuredLlmExecutor llm;
     private final CoordinationTask coordinationTask;
+    private final ChatMessageService chatMessageService;
+    private final ObjectMapper objectMapper;
 
     /**
      * @throws BusinessException 구성원이 아닌 여행·없는 여행(404), 정리할 대화가 하나도 남지 않음(400)
@@ -62,10 +65,13 @@ public class ChatCoordinationService {
         CoordinationOutput output = llm.execute(coordinationTask,
                 new CoordinationInput(trip.getCity(), lines)).value();
 
-        return new CoordinationResponse(output.text(),
+        CoordinationResponse response = new CoordinationResponse(output.text(),
                 new CoordinationResponse.Card(CoordinationResponse.OPINION_SUMMARY,
                         summaries(output, numberByUser)),
                 options(output));
+        String payload = objectMapper.writeValueAsString(Map.of("card", response.card(), "options", response.options()));
+        chatMessageService.appendAiForMember(tripId, userId, response.text(), payload);
+        return response;
     }
 
     /**

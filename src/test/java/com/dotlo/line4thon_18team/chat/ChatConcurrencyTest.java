@@ -116,7 +116,7 @@ class ChatConcurrencyTest {
     }
 
     private List<ChatMessageResponse> poll(Long after) {
-        return chatMessageService.list(owner.getId(), trip.getId(), after).messages();
+        return chatMessageService.list(owner.getId(), trip.getId(), after);
     }
 
     private static void await(CountDownLatch latch) {
