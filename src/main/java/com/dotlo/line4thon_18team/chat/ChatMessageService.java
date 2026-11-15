@@ -11,10 +11,13 @@ import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.trip.service.TripService;
 import com.dotlo.line4thon_18team.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -30,6 +33,8 @@ import java.util.List;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ChatMessageService {
+
+    private static final int COORDINATION_MESSAGE_LIMIT = 100;
 
     private final TripService tripService;
     private final TripRepository tripRepository;
@@ -57,6 +62,18 @@ public class ChatMessageService {
         return chatMessageRepository
                 .findTop100ByTripIdAndIdGreaterThanOrderByIdAsc(tripId, after == null ? 0L : after)
                 .stream().map(ChatMessageResponse::from).toList();
+    }
+
+    /** 같은 여행의 현 구성원이 보낸 최근 메시지 100개를 오래된 것부터 넘긴다. */
+    public CoordinationHistory loadCoordinationHistory(long userId, long tripId) {
+        Trip trip = tripService.findMemberTrip(userId, tripId);
+        List<ChatMessage> recentMessages = new ArrayList<>(chatMessageRepository.findRecentMemberMessages(
+                tripId, ChatMessageType.USER, PageRequest.of(0, COORDINATION_MESSAGE_LIMIT)));
+        Collections.reverse(recentMessages);
+        return new CoordinationHistory(trip.getCity(), recentMessages);
+    }
+
+    record CoordinationHistory(String city, List<ChatMessage> messages) {
     }
 
     /** "○○님이 여행에 참여했어요" 같은 알림. 권한 확인은 부르는 쪽이 한다. */

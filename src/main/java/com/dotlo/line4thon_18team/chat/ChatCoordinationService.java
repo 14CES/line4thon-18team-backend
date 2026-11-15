@@ -3,13 +3,11 @@ package com.dotlo.line4thon_18team.chat;
 import com.dotlo.line4thon_18team.chat.ai.CoordinationInput;
 import com.dotlo.line4thon_18team.chat.ai.CoordinationOutput;
 import com.dotlo.line4thon_18team.chat.ai.CoordinationTask;
-import com.dotlo.line4thon_18team.chat.dto.CoordinationCommand;
 import com.dotlo.line4thon_18team.chat.dto.CoordinationResponse;
+import com.dotlo.line4thon_18team.chat.entity.ChatMessage;
 import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.global.llm.StructuredLlmExecutor;
-import com.dotlo.line4thon_18team.trip.entity.Trip;
-import com.dotlo.line4thon_18team.trip.service.TripService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -17,11 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * 의견 조율 (COLLAB-COORD-001). 채팅방 대화를 읽고 사람별로 무엇을 원하는지 정리한 뒤,
@@ -41,7 +37,6 @@ public class ChatCoordinationService {
     static final String TALK_MORE_ID = "talk-more";
     static final String TALK_MORE_LABEL = "조금 더 이야기해 볼게요";
 
-    private final TripService tripService;
     private final StructuredLlmExecutor llm;
     private final CoordinationTask coordinationTask;
     private final ChatMessageService chatMessageService;
@@ -50,20 +45,21 @@ public class ChatCoordinationService {
     /**
      * @throws BusinessException 구성원이 아닌 여행·없는 여행(404), 정리할 대화가 하나도 남지 않음(400)
      */
-    public CoordinationResponse coordinate(long tripId, long userId, List<CoordinationCommand.Message> messages) {
-        Trip trip = tripService.findMemberTrip(userId, tripId);
-
-        Map<Long, Integer> numberByUser = numberInSpeakingOrder(trip, messages);
-        List<CoordinationInput.Line> lines = messages.stream()
-                .filter(message -> numberByUser.containsKey(message.userId()))
-                .map(message -> new CoordinationInput.Line(numberByUser.get(message.userId()), message.text()))
-                .toList();
-        if (lines.isEmpty()) {
+    public CoordinationResponse coordinate(long tripId, long userId) {
+        ChatMessageService.CoordinationHistory history = chatMessageService.loadCoordinationHistory(userId, tripId);
+        if (history.messages().isEmpty()) {
             throw new BusinessException(ErrorCode.NO_MESSAGES_TO_COORDINATE);
         }
 
+        Map<Long, Integer> numberByUser = new LinkedHashMap<>();
+        List<CoordinationInput.Line> lines = new ArrayList<>();
+        for (ChatMessage message : history.messages()) {
+            int number = numberByUser.computeIfAbsent(message.getSender().getId(),
+                    senderId -> numberByUser.size() + 1);
+            lines.add(new CoordinationInput.Line(number, message.getText()));
+        }
         CoordinationOutput output = llm.execute(coordinationTask,
-                new CoordinationInput(trip.getCity(), lines)).value();
+                new CoordinationInput(history.city(), lines)).value();
 
         CoordinationResponse response = new CoordinationResponse(output.text(),
                 new CoordinationResponse.Card(CoordinationResponse.OPINION_SUMMARY,
@@ -72,30 +68,6 @@ public class ChatCoordinationService {
         String payload = objectMapper.writeValueAsString(Map.of("card", response.card(), "options", response.options()));
         chatMessageService.appendAiForMember(tripId, userId, response.text(), payload);
         return response;
-    }
-
-    /**
-     * 처음 말한 순서대로 1번부터 붙인다. 같은 사람이 여러 번 말해도 번호는 하나다.
-     *
-     * <p>여행을 나갔거나 탈퇴한 사람의 지난 메시지는 채팅방에 그대로 남는다. 그 사람에게는 번호를 주지
-     * 않고 건너뛴다. 지금 함께 가는 사람들끼리 조율하는 자리이기도 하고, 번호가 없으면 요약에
-     * 그 사람 줄이 생기지 않아 화면에서 이름 없는 줄이 나오는 일도 없다.
-     */
-    private Map<Long, Integer> numberInSpeakingOrder(Trip trip, List<CoordinationCommand.Message> messages) {
-        Map<Long, Integer> numberByUser = new LinkedHashMap<>();
-        Set<Long> left = new HashSet<>();   // 같은 사람을 여러 번 조회하지 않으려고 기억해 둔다
-        for (CoordinationCommand.Message message : messages) {
-            Long writer = message.userId();
-            if (numberByUser.containsKey(writer) || left.contains(writer)) {
-                continue;
-            }
-            if (tripService.isMember(trip, writer)) {
-                numberByUser.put(writer, numberByUser.size() + 1);
-            } else {
-                left.add(writer);
-            }
-        }
-        return numberByUser;
     }
 
     /** 번호를 사용자 id 로 되돌린다. 모르는 번호는 CoordinationTask 가 걸러서 여기까지 오지 않는다. */

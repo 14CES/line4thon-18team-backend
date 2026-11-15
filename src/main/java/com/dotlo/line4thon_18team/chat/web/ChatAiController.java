@@ -2,13 +2,10 @@ package com.dotlo.line4thon_18team.chat.web;
 
 import com.dotlo.line4thon_18team.auth.LoginUser;
 import com.dotlo.line4thon_18team.chat.ChatCoordinationService;
-import com.dotlo.line4thon_18team.chat.dto.CoordinationCommand;
 import com.dotlo.line4thon_18team.chat.dto.CoordinationResponse;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -32,8 +29,7 @@ public class ChatAiController {
      * <p>AI 호출이 들어가서 응답이 몇 초에서 수십 초 걸릴 수 있다.
      */
     @PostMapping("/coordinate")
-    public CoordinationResponse coordinate(@PathVariable("tripId") long tripId, @LoginUser Long userId,
-                                           @Valid @RequestBody CoordinationCommand command) {
-        return coordinationService.coordinate(tripId, userId, command.messages());
+    public CoordinationResponse coordinate(@PathVariable("tripId") long tripId, @LoginUser Long userId) {
+        return coordinationService.coordinate(tripId, userId);
     }
 }
