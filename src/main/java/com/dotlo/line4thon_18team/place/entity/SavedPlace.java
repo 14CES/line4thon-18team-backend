@@ -96,6 +96,14 @@ public class SavedPlace extends BaseTimeEntity {
         return imported(PlaceSource.MANUAL_SEARCH, trip, null, name, null, null, null, null, listName);
     }
 
+    // 인기 코스에서 담은 장소. 코스가 구글 장소 id·좌표·카테고리를 이미 갖고 있어서 매칭 없이 바로 MATCHED
+    public static SavedPlace fromCourse(Trip trip, String placeId, String name, double latitude, double longitude,
+                                        PlaceCategory category, String listName) {
+        SavedPlace place = imported(PlaceSource.POPULAR, trip, null, name, null, null, null, null, listName);
+        place.applyMatch(name, placeId, null, latitude, longitude, category, PlaceMatchStatus.MATCHED);
+        return place;
+    }
+
     private static SavedPlace imported(PlaceSource source, Trip trip, String featureId, String name, String note,
                                        String googleUrl, Double latitude, Double longitude, String listName) {
         SavedPlace place = new SavedPlace();

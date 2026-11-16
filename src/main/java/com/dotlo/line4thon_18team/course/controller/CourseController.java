@@ -1,26 +1,36 @@
 package com.dotlo.line4thon_18team.course.controller;
 
+import com.dotlo.line4thon_18team.auth.LoginUser;
 import com.dotlo.line4thon_18team.course.dto.CourseDetailResponse;
+import com.dotlo.line4thon_18team.course.dto.CourseImportRequest;
+import com.dotlo.line4thon_18team.course.dto.CourseImportResponse;
 import com.dotlo.line4thon_18team.course.dto.CourseSummaryResponse;
+import com.dotlo.line4thon_18team.course.service.CourseImportService;
 import com.dotlo.line4thon_18team.course.service.CourseService;
 import com.dotlo.line4thon_18team.place.PlacePhotos;
 import com.dotlo.line4thon_18team.place.PlacePhotos.Photo;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.URI;
 import java.util.List;
 
-/** 공용 코스 원본 조회. 개인별 정보가 없으므로 로그인 없이 둘러볼 수 있다. */
+/** 공용 코스 원본 조회는 개인별 정보가 없으므로 로그인 없이 둘러볼 수 있다. 가져오기만 로그인이 필요하다. */
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/courses")
 public class CourseController {
 
     private final CourseService courseService;
+    private final CourseImportService courseImportService;
     private final PlacePhotos placePhotos;
 
     @GetMapping
@@ -39,5 +49,16 @@ public class CourseController {
                        @RequestParam(defaultValue = "400") int maxWidth) {
         courseService.requireStop(courseId, placeId);
         return placePhotos.get(placeId, index, PlacePhotos.width(maxWidth));
+    }
+
+    /**
+     * 내 일정으로 가져오기 → 201. 코스 기간만큼 새 여행을 만들고 코스 일정을 그대로 넣는다.
+     * 일정 검증(영업시간·이동시간 조회)이 들어가서 몇 초 걸릴 수 있다.
+     */
+    @PostMapping("/{courseId}/import")
+    public ResponseEntity<CourseImportResponse> importCourse(@LoginUser Long userId, @PathVariable long courseId,
+                                                             @Valid @RequestBody CourseImportRequest request) {
+        CourseImportResponse response = courseImportService.importAsNewTrip(userId, courseId, request);
+        return ResponseEntity.created(URI.create("/api/trips/" + response.tripId())).body(response);
     }
 }
