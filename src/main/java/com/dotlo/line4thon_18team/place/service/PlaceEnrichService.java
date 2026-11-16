@@ -12,9 +12,8 @@ import com.dotlo.line4thon_18team.place.entity.PlaceMatchStatus;
 import com.dotlo.line4thon_18team.place.entity.SavedPlace;
 import com.dotlo.line4thon_18team.place.repository.SavedPlaceRepository;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
+import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.trip.service.TripService;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,10 +31,10 @@ public class PlaceEnrichService {
     private static final String MANUAL_LIST = "직접 추가";   // 직접 추가한 장소의 리스트 이름
 
     private final TripService tripService;
+    private final TripRepository tripRepository;
     private final PlaceMatcher placeMatcher;
     private final SavedPlaceRepository savedPlaceRepository;
     private final TransactionTemplate transactionTemplate;
-    private final EntityManager entityManager;
 
     // ponytail: 장소마다 구글 검색 1번씩 순서대로 호출. 장소가 많아 느리면 병렬 호출로 바꾸기
     // 트랜잭션은 장소 1개 저장할 때만 연다. 구글을 기다리는 동안 DB 연결을 잡지 않고,
@@ -45,7 +44,7 @@ public class PlaceEnrichService {
         for (SavedPlace p : savedPlaceRepository.findAllByTripIdAndMatchStatus(tripId, PlaceMatchStatus.PENDING)) {
             PlaceInput input = new PlaceInput(p.getId(), p.getName(), p.getFeatureId(), p.getLatitude(), p.getLongitude());
             MatchResult r = placeMatcher.matchPlaces(List.of(input), city.lat(), city.lng()).get(0);
-            transactionTemplate.executeWithoutResult(status -> save(tripId, city, r, PlaceMatchStatus.PENDING));
+            transactionTemplate.executeWithoutResult(status -> save(userId, tripId, city, r, PlaceMatchStatus.PENDING));
         }
     }
 
@@ -58,7 +57,7 @@ public class PlaceEnrichService {
         if (place.getMatchStatus() != PlaceMatchStatus.NEEDS_REVIEW) throw new BusinessException(ErrorCode.PLACE_NOT_REVIEWABLE);
 
         MatchResult r = placeMatcher.details(savedPlaceId, googlePlaceId);   // 없는 placeId면 400
-        transactionTemplate.executeWithoutResult(status -> save(tripId, city, r, PlaceMatchStatus.NEEDS_REVIEW));
+        transactionTemplate.executeWithoutResult(status -> save(userId, tripId, city, r, PlaceMatchStatus.NEEDS_REVIEW));
     }
 
     // 장소 직접 추가: 검색해서 고른 구글 장소를 "직접 추가" 리스트로 저장한다.
@@ -66,7 +65,7 @@ public class PlaceEnrichService {
     public void add(Long userId, Long tripId, String googlePlaceId) {
         City city = cityOf(userId, tripId);
         Boolean existing = transactionTemplate.execute(status -> {
-            lockTrip(tripId);
+            lockTrip(userId, tripId);
             return addToManualList(tripId, googlePlaceId);   // 있으면 구글을 부르지 않는다
         });
         if (Boolean.TRUE.equals(existing)) return;
@@ -74,7 +73,7 @@ public class PlaceEnrichService {
         MatchResult r = placeMatcher.details(null, googlePlaceId);   // 없는 placeId면 400
         Candidate c = r.place();
         transactionTemplate.executeWithoutResult(status -> {
-            Trip trip = lockTrip(tripId);
+            Trip trip = lockTrip(userId, tripId);
             // 그사이 같은 장소가 들어왔으면 (같은 요청 두 번, 업로드 후 보강) 리스트 이름만 붙인다
             if (addToManualList(tripId, c.placeId())) return;
             SavedPlace place = SavedPlace.fromSearch(trip, c.name(), MANUAL_LIST);
@@ -93,8 +92,12 @@ public class PlaceEnrichService {
 
     // 여행 행을 잠가서 같은 여행의 추가·보강 저장을 한 번에 하나씩 처리한다. 안 잠그면 같은 장소가 2행 이상 생김
     // (2026-11-06 추가 버튼 연달아 3번 → 2~3행, 2026-11-08 보강과 직접 추가 동시 → 20번 중 8번 2행)
-    private Trip lockTrip(Long tripId) {
-        return entityManager.find(Trip.class, tripId, LockModeType.PESSIMISTIC_WRITE);
+    // 여행 삭제·나가기와 같은 여행 행 잠금을 먼저 잡고 구성원인지 다시 본다. 삭제 중에 들어오면 삭제가 끝난 뒤 404
+    // (2026-11-15 잠금 전에 확인만 하면 삭제 도중 저장이 외래키 오류로 500)
+    private Trip lockTrip(Long userId, Long tripId) {
+        return tripRepository.findByIdForUpdate(tripId)
+                .filter(trip -> tripService.isMember(trip, userId))
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRIP_NOT_FOUND));
     }
 
     private City cityOf(Long userId, Long tripId) {
@@ -104,8 +107,8 @@ public class PlaceEnrichService {
     }
 
     // from: 저장 직전에도 이 상태여야 저장한다
-    private void save(Long tripId, City city, MatchResult r, PlaceMatchStatus from) {
-        lockTrip(tripId);
+    private void save(Long userId, Long tripId, City city, MatchResult r, PlaceMatchStatus from) {
+        lockTrip(userId, tripId);
         SavedPlace place = savedPlaceRepository.findById(r.id()).orElse(null);
         // 그사이 사용자가 삭제했거나, 동시에 들어온 다른 요청이 먼저 처리한 장소.
         // 처리된 장소는 placeId 가 있어서, 그냥 진행하면 아래 중복 확인에서 자기 자신을 찾아 지운다
