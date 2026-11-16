@@ -2,6 +2,7 @@ package com.dotlo.line4thon_18team.place;
 
 import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.error.ErrorCode;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,7 +34,13 @@ public class PlaceMatcher {
     public record MatchResult(Long id, MatchStatus status, Candidate place, List<Candidate> candidates,
                               PlaceCategory category, boolean closed) {}
 
-    public record Candidate(String placeId, String name, String address, double lat, double lng) {}
+    // category: 장소 유형 (FE 검색·근처 추천 목록의 "카페 | 도톤보리에서 200m"). 구글 결과가 아니면 null
+    public record Candidate(String placeId, String name, String address, double lat, double lng,
+                            PlaceCategory category) {
+        public Candidate(String placeId, String name, String address, double lat, double lng) {
+            this(placeId, name, address, lat, lng, null);
+        }
+    }
 
     public enum MatchStatus {
         MATCHED,       // 확정
@@ -54,6 +61,20 @@ public class PlaceMatcher {
     record Location(double latitude, double longitude) {}
 
     private static final String SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
+    private static final String NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby";  // 같은 필드라 Nearby Search Pro 요금
+    private static final int NEARBY_RADIUS_M = 2000;
+    // 근처 추천 탭마다 구글에 넘기는 장소 유형. 구글은 보조 유형까지 맞춰서 백화점이 맛집에 섞이므로 결과를 우리 분류로 한 번 더 거름
+    // (2026-11-16 오사카 도톤보리 기준 확인)
+    private static final Map<PlaceCategory, List<String>> NEARBY_TYPES = Map.of(
+            PlaceCategory.FOOD, List.of("restaurant"),
+            PlaceCategory.CAFE, List.of("cafe", "coffee_shop", "bakery", "dessert_shop"),
+            PlaceCategory.SIGHTSEEING, List.of("tourist_attraction", "observation_deck"),
+            PlaceCategory.SHOPPING, List.of("shopping_mall", "department_store", "market"),
+            PlaceCategory.NATURE, List.of("park", "garden", "beach", "hiking_area"),
+            PlaceCategory.CULTURE, List.of("museum", "art_gallery", "historical_landmark", "cultural_landmark",
+                    "shinto_shrine", "buddhist_temple", "castle"),
+            PlaceCategory.NIGHTLIFE, List.of("bar", "night_club"),
+            PlaceCategory.ACTIVITY, List.of("amusement_park", "aquarium", "zoo"));
     private static final String FIELD_MASK =
             "places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri,"
                     + "places.primaryType,places.types,places.businessStatus";  // 전부 Text Search Pro 요금
@@ -92,6 +113,35 @@ public class PlaceMatcher {
         return search(query, lat, lng, radius, 10, true).stream()
                 .map(Hit::candidate)
                 .filter(c -> meters(lat, lng, c.lat(), c.lng()) <= radius)  // 검색 범위가 사각형이라 모서리 부분은 직접 거름
+                .toList();
+    }
+
+    // 근처 추천. 중심에서 2km 안 구글 인기 장소 20곳 중 이 유형만, 가까운 순. category가 null이면 모든 유형 (추천 탭)
+    // 호텔은 숙소 등록에서 따로 고르므로 뺍니다. category는 OTHER가 아니어야 합니다.
+    public List<Candidate> searchNearby(double lat, double lng, PlaceCategory category) {
+        List<String> types = category == null
+                ? NEARBY_TYPES.values().stream().flatMap(List::stream).toList()
+                : NEARBY_TYPES.get(category);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("includedTypes", types);
+        body.put("excludedPrimaryTypes", List.of("hotel", "lodging"));
+        body.put("maxResultCount", 20);
+        body.put("rankPreference", "POPULARITY");
+        body.put("languageCode", "ko");
+        body.put("locationRestriction", Map.of("circle", Map.of(
+                "center", Map.of("latitude", lat, "longitude", lng),
+                "radius", NEARBY_RADIUS_M)));
+        return nearest(post(NEARBY_URL, body), lat, lng, category);
+    }
+
+    // 폐업·다른 유형을 빼고 가까운 순
+    static List<Candidate> nearest(List<Place> places, double lat, double lng, PlaceCategory category) {
+        return places.stream()
+                .map(PlaceMatcher::toHit)
+                .filter(h -> !h.closed())
+                .filter(h -> category == null ? h.category() != PlaceCategory.OTHER : h.category() == category)
+                .map(Hit::candidate)
+                .sorted(Comparator.comparingDouble(c -> meters(lat, lng, c.lat(), c.lng())))
                 .toList();
     }
 
@@ -176,24 +226,27 @@ public class PlaceMatcher {
                     "low", Map.of("latitude", lat - dLat, "longitude", lng - dLng),
                     "high", Map.of("latitude", lat + dLat, "longitude", lng + dLng))));
         }
-        SearchResponse res = rest.post().uri(SEARCH_URL)
+        return post(SEARCH_URL, body).stream().map(PlaceMatcher::toHit).toList();
+    }
+
+    private List<Place> post(String url, Map<String, Object> body) {
+        SearchResponse res = rest.post().uri(url)
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("X-Goog-Api-Key", apiKey)
                 .header("X-Goog-FieldMask", FIELD_MASK)
                 .body(body)
                 .retrieve()
                 .body(SearchResponse.class);
-        if (res == null || res.places() == null) return List.of();  // 결과 0개면 {} 가 옴
-
-        return res.places().stream().map(PlaceMatcher::toHit).toList();
+        return res == null || res.places() == null ? List.of() : res.places();  // 결과 0개면 {} 가 옴
     }
 
     private static Hit toHit(Place pl) {
         Matcher m = CID_PARAM.matcher(pl.googleMapsUri() == null ? "" : pl.googleMapsUri());
+        PlaceCategory category = PlaceCategoryMapper.of(pl.primaryType(), pl.types());
         return new Hit(new Candidate(pl.id(), pl.displayName().text(), pl.formattedAddress(),
-                pl.location().latitude(), pl.location().longitude()),
+                pl.location().latitude(), pl.location().longitude(), category),
                 m.find() ? m.group(1) : null,
-                PlaceCategoryMapper.of(pl.primaryType(), pl.types()),
+                category,
                 "CLOSED_PERMANENTLY".equals(pl.businessStatus()));
     }
 

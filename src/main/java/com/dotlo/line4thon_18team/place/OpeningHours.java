@@ -1,5 +1,7 @@
 package com.dotlo.line4thon_18team.place;
 
+import com.dotlo.line4thon_18team.global.error.BusinessException;
+import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -8,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 /** BE2 영업시간. BE3(일정 검증)는 이 서비스를 주입받아 직접 호출합니다. */
@@ -58,11 +61,20 @@ public class OpeningHours {
     // API 오류(키, 할당량)는 예외로 던집니다.
     // ponytail: 기본 영업시간만 봄. 공휴일·임시 휴무(currentOpeningHours)는 7일 이내만 나와서 제외.
     public Hours get(String placeId) {
-        Details d = rest.get().uri(DETAILS_URL, placeId)
-                .header("X-Goog-Api-Key", apiKey)
-                .header("X-Goog-FieldMask", "regularOpeningHours")
-                .retrieve()
-                .body(Details.class);
+        Details d;
+        try {
+            d = rest.get().uri(DETAILS_URL, placeId)
+                    .header("X-Goog-Api-Key", apiKey)
+                    .header("X-Goog-FieldMask", "regularOpeningHours")
+                    .retrieve()
+                    .body(Details.class);
+        } catch (HttpClientErrorException.BadRequest e) {
+            // 키가 틀려도 400이라 메시지로 구분 (PlacePhotos와 같음)
+            if (e.getResponseBodyAsString().contains("Place ID")) throw new BusinessException(ErrorCode.INVALID_PLACE_ID);
+            throw e;
+        } catch (HttpClientErrorException.NotFound e) {
+            throw new BusinessException(ErrorCode.INVALID_PLACE_ID);
+        }
         if (d == null || d.regularOpeningHours() == null || d.regularOpeningHours().periods() == null) return null;
         return toHours(d.regularOpeningHours().periods());
     }
