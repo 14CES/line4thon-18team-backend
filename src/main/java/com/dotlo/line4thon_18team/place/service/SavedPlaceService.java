@@ -77,6 +77,11 @@ public class SavedPlaceService {
     }
 
     /** 장소 찜 목록. 마이의 저장한 장소 수(countInMyTrips)와 같은 범위다. */
+    // 장소 상세 하트: 이 여행에 저장한 장소면 저장 장소 id, 아니면 null (구성원 확인은 부르는 쪽에서)
+    public Long findSavedPlaceId(Long tripId, String placeId) {
+        return savedPlaceRepository.findFirstByTripIdAndPlaceId(tripId, placeId).map(SavedPlace::getId).orElse(null);
+    }
+
     public List<MySavedPlaceResponse> getMyPlaces(Long userId) {
         return savedPlaceRepository.findAllInMyTrips(userId).stream().map(MySavedPlaceResponse::from).toList();
     }
