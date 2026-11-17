@@ -20,6 +20,9 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
     @EntityGraph(attributePaths = "tags")
     Optional<Course> findWithTagsById(Long id);
 
+    @EntityGraph(attributePaths = "tags")
+    List<Course> findAllWithTagsByIdIn(List<Long> ids);
+
     // 목록에서는 일차·장소 전체를 읽지 않고 방문 항목 수만 한 번에 센다.
     @Query("""
             select stop.day.course.id as courseId, count(stop) as stopCount
