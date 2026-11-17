@@ -41,6 +41,30 @@ class PlaceMatcherTest {
         assertEquals(PlaceMatcher.MatchStatus.NEEDS_REVIEW, r.get(0).status());
     }
 
+    @Test
+    void 근처_추천은_폐업과_다른_유형을_빼고_가까운_순() {
+        double lat = 34.6687, lng = 135.5013;   // 도톤보리
+        List<PlaceMatcher.Place> places = List.of(
+                place("far-ramen", 34.6800, "ramen_restaurant", "OPERATIONAL"),
+                place("mall", 34.6690, "department_store", "OPERATIONAL"),          // 구글은 맛집 검색에도 섞어 줌
+                place("near-ramen", 34.6690, "ramen_restaurant", "OPERATIONAL"),
+                place("closed-ramen", 34.6688, "ramen_restaurant", "CLOSED_PERMANENTLY"),
+                place("station", 34.6689, "train_station", "OPERATIONAL"));       // 기타
+
+        var food = PlaceMatcher.nearest(places, lat, lng, PlaceCategory.FOOD);
+        assertEquals(List.of("near-ramen", "far-ramen"), food.stream().map(PlaceMatcher.Candidate::placeId).toList());
+        assertEquals(PlaceCategory.FOOD, food.get(0).category());
+
+        var all = PlaceMatcher.nearest(places, lat, lng, null);   // 추천 탭: 기타만 뺌
+        assertEquals(List.of("mall", "near-ramen", "far-ramen"),
+                all.stream().map(PlaceMatcher.Candidate::placeId).toList());
+    }
+
+    private static PlaceMatcher.Place place(String id, double lat, String type, String status) {
+        return new PlaceMatcher.Place(id, new PlaceMatcher.Text(id), "주소", new PlaceMatcher.Location(lat, 135.5013),
+                null, type, List.of(type), status);
+    }
+
     // 실제 API 호출. 키가 환경변수에 있을 때만 (CI에서는 건너뜀)
     @Test
     @EnabledIfEnvironmentVariable(named = "GOOGLE_MAPS_API_KEY", matches = ".+")
@@ -52,6 +76,18 @@ class PlaceMatcherTest {
         cafes.forEach(c -> assertTrue(PlaceMatcher.meters(lat, lng, c.lat(), c.lng()) <= 500, c.name()));
         assertTrue(matcher.searchNear("ㅁㄴㅇㄹㅁㄴㅇㄹ", lat, lng, 500).isEmpty());
         cafes.forEach(c -> System.out.println("카페: " + c.name() + " / "
+                + Math.round(PlaceMatcher.meters(lat, lng, c.lat(), c.lng())) + "m"));
+    }
+
+    @Test
+    @EnabledIfEnvironmentVariable(named = "GOOGLE_MAPS_API_KEY", matches = ".+")
+    void 근처_추천() {
+        PlaceMatcher matcher = new PlaceMatcher(System.getenv("GOOGLE_MAPS_API_KEY"));
+        double lat = 34.6687, lng = 135.5013;   // 도톤보리
+        var food = matcher.searchNearby(lat, lng, PlaceCategory.FOOD);
+        assertFalse(food.isEmpty());
+        food.forEach(c -> assertEquals(PlaceCategory.FOOD, c.category(), c.name()));
+        food.forEach(c -> System.out.println("맛집: " + c.name() + " / "
                 + Math.round(PlaceMatcher.meters(lat, lng, c.lat(), c.lng())) + "m"));
     }
 }
