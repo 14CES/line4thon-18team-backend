@@ -16,10 +16,11 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
-    show-sql: true
+    # 실행되는 SQL 로그. 서버에서는 로그만 커져서 기본은 끄고, 로컬은 .env 의 JPA_SHOW_SQL=true 로 켠다
+    show-sql: ${JPA_SHOW_SQL:false}
     properties:
       hibernate:
-        format_sql: true
+        format_sql: ${JPA_SHOW_SQL:false}
 
   # 파일 업로드 용량 (기본 1MB라 Takeout zip이 막힘)
   servlet:

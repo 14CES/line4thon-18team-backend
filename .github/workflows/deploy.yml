@@ -52,11 +52,15 @@ jobs:
             docker stop dotlo-backend || true
             docker rm dotlo-backend || true
 
+            # 8080 은 같은 서버의 Nginx 만 쓰므로 서버 안(127.0.0.1)에서만 받는다
+            # 컨테이너 로그는 10MB 파일 3개까지만 남겨서 디스크가 차지 않게 한다
             docker run -d \
               --name dotlo-backend \
               --restart unless-stopped \
               --env-file /home/ubuntu/app.env \
-              -p 8080:8080 \
+              -p 127.0.0.1:8080:8080 \
+              --log-opt max-size=10m \
+              --log-opt max-file=3 \
               $IMAGE
 
             docker image prune -af
