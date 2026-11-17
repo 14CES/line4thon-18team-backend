@@ -25,9 +25,12 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * AI 일정 생성 (GEN-PLAN-001).
@@ -63,7 +66,17 @@ public class ItineraryGenerationService {
      * @throws BusinessException 남의 여행·없는 여행(404), 배치할 장소가 없음(400), 숙소를 일부만 넣음(400)
      */
     public GeneratedItineraryVersion generateAndSave(long tripId, long userId) {
-        GeneratedItinerary generated = generate(tripId, userId);
+        return generateAndSave(tripId, userId, null);
+    }
+
+    /**
+     * 고른 장소로 일정을 만들어 새 버전으로 저장한다.
+     *
+     * @param savedPlaceIds 고른 저장 장소 id. null이면 저장 장소 전체
+     * @throws BusinessException 이 여행에 없는 장소 id가 섞임(400, AI 호출 전)
+     */
+    public GeneratedItineraryVersion generateAndSave(long tripId, long userId, Collection<Long> savedPlaceIds) {
+        GeneratedItinerary generated = generate(tripId, userId, savedPlaceIds);
         ItineraryVersionView saved = itineraryService.saveAiDraft(tripId, userId,
                 generated.draft(), generated.validation());
         return new GeneratedItineraryVersion(saved, generated.excludedPlaceIds());
@@ -78,8 +91,13 @@ public class ItineraryGenerationService {
      * @throws BusinessException 남의 여행·없는 여행(404), 배치할 장소가 없음(400)
      */
     public GeneratedItinerary generate(long tripId, long userId) {
+        return generate(tripId, userId, null);
+    }
+
+    /** @param savedPlaceIds 고른 저장 장소 id. null이면 저장 장소 전체 */
+    public GeneratedItinerary generate(long tripId, long userId, Collection<Long> savedPlaceIds) {
         ValidationRun run = validationService.prepare(tripId, userId);
-        PlanGenerationInput input = buildInput(run);
+        PlanGenerationInput input = buildInput(run, selected(run.places(), savedPlaceIds));
 
         GeneratedItinerary last = null;
         List<String> problems = List.of();
@@ -99,9 +117,22 @@ public class ItineraryGenerationService {
         return last;
     }
 
+    /** 고른 장소만 남긴다 (null이면 전체). 이 여행에 없는 id가 섞이면 AI를 부르기 전에 400 */
+    private static List<SavedPlace> selected(List<SavedPlace> places, Collection<Long> savedPlaceIds) {
+        if (savedPlaceIds == null) {
+            return places;
+        }
+        Set<Long> ids = new HashSet<>(savedPlaceIds);
+        List<SavedPlace> picked = places.stream().filter(place -> ids.contains(place.getId())).toList();
+        if (picked.size() != ids.size()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "이 여행에 없는 장소가 있습니다.");
+        }
+        return picked;
+    }
+
     /** 매칭이 끝난 장소만 쓴다. place ID가 없으면 영업시간·이동시간을 조회할 수 없다. */
-    private static PlanGenerationInput buildInput(ValidationRun run) {
-        List<PlanGenerationInput.PlaceRef> candidates = run.places().stream()
+    private static PlanGenerationInput buildInput(ValidationRun run, List<SavedPlace> places) {
+        List<PlanGenerationInput.PlaceRef> candidates = places.stream()
                 .filter(place -> place.getMatchStatus() == PlaceMatchStatus.MATCHED && place.getPlaceId() != null)
                 .map(place -> new PlanGenerationInput.PlaceRef(place.getPlaceId(), place.getName(),
                         place.getCategory()))

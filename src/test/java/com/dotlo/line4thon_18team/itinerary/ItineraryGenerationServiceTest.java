@@ -208,7 +208,68 @@ class ItineraryGenerationServiceTest {
         Mockito.verifyNoInteractions(itineraryService);
     }
 
+    @Test
+    void 고른_장소만_AI에_넘긴다() {
+        given(withId(1L, matched(DOTONBORI)), withId(2L, matched(KUROMON)), withId(3L, matched(OSAKA_CASTLE)));
+        llm.thenReturn("""
+                {"days": [{"dayNumber": 1, "placeNumbers": [1]},
+                          {"dayNumber": 2, "placeNumbers": [2]},
+                          {"dayNumber": 3, "placeNumbers": []},
+                          {"dayNumber": 4, "placeNumbers": []}],
+                 "excluded": []}
+                """);
+
+        GeneratedItinerary result = service.generate(1L, 7L, List.of(3L, 1L));
+
+        assertThat(result.draft().days()).flatExtracting(day -> day.visits()).extracting(v -> v.placeId())
+                .containsExactlyInAnyOrder(DOTONBORI.placeId(), OSAKA_CASTLE.placeId());
+        assertThat(llm.requests().get(0).toString()).doesNotContain(KUROMON.name());
+    }
+
+    @Test
+    void 고른_장소_중_매칭된_장소만_쓴다() {
+        given(withId(1L, matched(DOTONBORI)), withId(2L, pending(KUROMON)));
+        llm.thenReturn("""
+                {"days": [{"dayNumber": 1, "placeNumbers": [1]},
+                          {"dayNumber": 2, "placeNumbers": []},
+                          {"dayNumber": 3, "placeNumbers": []},
+                          {"dayNumber": 4, "placeNumbers": []}],
+                 "excluded": []}
+                """);
+
+        GeneratedItinerary result = service.generate(1L, 7L, List.of(1L, 2L));
+
+        assertThat(result.draft().days().get(0).visits()).extracting(v -> v.placeId())
+                .containsExactly(DOTONBORI.placeId());
+    }
+
+    @Test
+    void 고른_장소가_모두_매칭_전이면_400이다() {
+        given(withId(1L, matched(DOTONBORI)), withId(2L, pending(KUROMON)));
+
+        assertThatThrownBy(() -> service.generate(1L, 7L, List.of(2L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("장소가 없습니다");
+        assertThat(llm.callCount()).isZero();
+    }
+
+    @Test
+    void 이_여행에_없는_장소_id가_섞이면_AI를_부르기_전에_400이다() {
+        given(withId(1L, matched(DOTONBORI)), withId(2L, matched(KUROMON)));
+
+        assertThatThrownBy(() -> service.generateAndSave(1L, 7L, List.of(1L, 99L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("이 여행에 없는 장소");
+        assertThat(llm.callCount()).isZero();
+        Mockito.verifyNoInteractions(itineraryService);
+    }
+
     // ---- helpers ----
+
+    private static SavedPlace withId(long id, SavedPlace place) {
+        Mockito.when(place.getId()).thenReturn(id);
+        return place;
+    }
 
     private static ItineraryVersionView savedVersion(Object draft) {
         return new ItineraryVersionView(1, ItinerarySource.AI_GENERATED, null, 7L, LocalDateTime.now(),
