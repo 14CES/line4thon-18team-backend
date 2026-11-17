@@ -2,6 +2,9 @@ package com.dotlo.line4thon_18team.user;
 
 import com.dotlo.line4thon_18team.auth.google.GoogleOAuthClient;
 import com.dotlo.line4thon_18team.auth.google.GoogleUser;
+import com.dotlo.line4thon_18team.course.entity.Course;
+import com.dotlo.line4thon_18team.course.repository.CourseBookmarkRepository;
+import com.dotlo.line4thon_18team.course.repository.CourseRepository;
 import com.dotlo.line4thon_18team.member.entity.TripMember;
 import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
 import com.dotlo.line4thon_18team.preference.PreferenceRepository;
@@ -51,6 +54,8 @@ class WithdrawalTest {
     @Autowired TripRepository trips;
     @Autowired TripMemberRepository tripMembers;
     @Autowired PreferenceRepository preferences;
+    @Autowired CourseRepository courses;
+    @Autowired CourseBookmarkRepository bookmarks;
     @MockitoBean GoogleOAuthClient googleOAuthClient;
 
     private String sub;
@@ -89,6 +94,7 @@ class WithdrawalTest {
     void 탈퇴하면_혼자_쓰던_여행은_지워지고_같이_쓰던_여행은_남는다() throws Exception {
         savePreference(shared, "해산물 알레르기가 있어요");
         savePreference(joined, "야경을 좋아해요");
+        bookmarks.insertIgnore(me.getId(), courses.saveAndFlush(Course.create("교토 산책", "일본", "교토", 1)).getId());
 
         mvc.perform(delete("/api/users/me").header("X-User-Id", me.getId())).andExpect(status().isNoContent());
 
@@ -97,6 +103,7 @@ class WithdrawalTest {
                 .extracting(trip -> trip.getUser().getId()).isEqualTo(friend.getId());
         assertThat(tripMembers.countByTripId(shared.getId())).isZero();
         assertThat(tripMembers.existsByTripIdAndUserId(joined.getId(), me.getId())).isFalse();
+        assertThat(bookmarks.countByUserId(me.getId())).isZero();   // 코스 찜도 같이 지운다
         // 남는 여행에 내가 쓴 여행별 취향(메모)이 남지 않는다
         assertThat(preferences.findByTripAndUser(shared.getId(), me.getId())).isEmpty();
         assertThat(preferences.findByTripAndUser(joined.getId(), me.getId())).isEmpty();
