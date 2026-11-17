@@ -7,6 +7,8 @@ import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.place.PlaceMatcher;
 import com.dotlo.line4thon_18team.place.PlaceMatcher.Candidate;
+import com.dotlo.line4thon_18team.place.dto.PopularPlaceResponse;
+import com.dotlo.line4thon_18team.place.service.SavedPlaceService;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.service.TripService;
 import java.util.List;
@@ -24,6 +26,7 @@ public class PlaceSearchController {
 
     private final TripService tripService;
     private final PlaceMatcher placeMatcher;
+    private final SavedPlaceService savedPlaceService;
 
     // 장소·숙소 검색. 여행 도시 중심 50km 안, 최대 10개. 결과가 없으면 빈 목록 (FE가 주소 직접 입력으로 안내)
     @GetMapping("/api/places/search")
@@ -35,5 +38,11 @@ public class PlaceSearchController {
         City city = CityController.findByName(trip.getCity())
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNSUPPORTED_CITY));
         return placeMatcher.searchNear(query, city.lat(), city.lng(), SEARCH_RADIUS_M);
+    }
+
+    // 검색 화면 "○○에서 많이 담는 곳". 여행 도시에서 많은 여행이 담은 장소 최대 10개 (이 여행에 담긴 곳은 뺌)
+    @GetMapping("/api/places/popular")
+    public List<PopularPlaceResponse> popular(@LoginUser Long userId, @RequestParam Long tripId) {
+        return savedPlaceService.getPopularPlaces(userId, tripId);
     }
 }
