@@ -111,6 +111,10 @@ class PlaceSearchControllerTest {
                         .header("X-User-Id", "1"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+        mvc.perform(get("/api/places/nearby").param("tripId", "7").param("lat", "34.6687").param("lng", "495.5013")   // 경도 + 360
+                        .header("X-User-Id", "1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
         verify(placeMatcher, never()).searchNearby(anyDouble(), anyDouble(), any());
     }
 

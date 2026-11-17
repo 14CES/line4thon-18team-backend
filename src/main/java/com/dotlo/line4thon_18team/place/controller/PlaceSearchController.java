@@ -65,7 +65,9 @@ public class PlaceSearchController {
         if (category == PlaceCategory.OTHER) throw new BusinessException(ErrorCode.INVALID_INPUT, "기타 유형으로는 추천할 수 없습니다.");
         City city = memberTripCity(userId, tripId);
         // 여행 도시 밖(잘못된 좌표, NaN 포함)은 구글을 부르지 않음. NaN 은 비교가 늘 false 라 <= 로 확인
-        if (!(PlaceMatcher.meters(city.lat(), city.lng(), lat, lng) <= SEARCH_RADIUS_M)) {
+        // 위도·경도 범위도 먼저 봄 (경도에 360을 더해도 거리 계산은 같아서 반경 검사를 통과함)
+        if (!(Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+                && PlaceMatcher.meters(city.lat(), city.lng(), lat, lng) <= SEARCH_RADIUS_M)) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "여행 도시 근처 좌표가 아닙니다.");
         }
         return placeMatcher.searchNearby(lat, lng, category);
