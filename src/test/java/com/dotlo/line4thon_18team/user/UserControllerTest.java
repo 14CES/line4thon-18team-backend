@@ -1,5 +1,8 @@
 package com.dotlo.line4thon_18team.user;
 
+import com.dotlo.line4thon_18team.course.entity.Course;
+import com.dotlo.line4thon_18team.course.repository.CourseBookmarkRepository;
+import com.dotlo.line4thon_18team.course.repository.CourseRepository;
 import com.dotlo.line4thon_18team.member.entity.TripMember;
 import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
 import com.dotlo.line4thon_18team.place.entity.SavedPlace;
@@ -60,6 +63,8 @@ class UserControllerTest {
     @Autowired TripRepository trips;
     @Autowired TripMemberRepository tripMembers;
     @Autowired SavedPlaceRepository savedPlaces;
+    @Autowired CourseRepository courses;
+    @Autowired CourseBookmarkRepository bookmarks;
 
     private User me;
     private User other;
@@ -133,11 +138,14 @@ class UserControllerTest {
         savePlace(endedYesterday);
         savePlace(joined);
         savePlace(notMine);
+        Course course = courses.saveAndFlush(Course.create("오사카 먹방", "일본", "오사카", 1));
+        bookmarks.insertIgnore(me.getId(), course.getId());
+        bookmarks.insertIgnore(other.getId(), course.getId());   // 남이 찜한 건 세지 않는다
 
         mvc.perform(get("/api/users/me/stats").header("X-User-Id", me.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.savedPlaceCount").value(3))
-                .andExpect(jsonPath("$.savedCourseCount").value(0))
+                .andExpect(jsonPath("$.savedCourseCount").value(1))
                 .andExpect(jsonPath("$.completedTripCount").value(2));
     }
 

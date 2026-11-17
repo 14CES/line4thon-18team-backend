@@ -1,5 +1,6 @@
 package com.dotlo.line4thon_18team.user.service;
 
+import com.dotlo.line4thon_18team.course.repository.CourseBookmarkRepository;
 import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.member.entity.TripMember;
@@ -38,6 +39,7 @@ public class WithdrawalService {
     private final TripLeaveService tripLeaveService;
     private final UserPreferenceRepository userPreferenceRepository;
     private final PreferenceRepository preferenceRepository;
+    private final CourseBookmarkRepository courseBookmarkRepository;
 
     public WithdrawalPreviewResponse preview(Long userId) {
         findUser(userId);
@@ -69,6 +71,7 @@ public class WithdrawalService {
         }
         userPreferenceRepository.deleteByUser(userId);
         preferenceRepository.deleteByUser(userId);
+        courseBookmarkRepository.deleteAllByUserId(userId);
         user.withdraw(LocalDateTime.now());
     }
 

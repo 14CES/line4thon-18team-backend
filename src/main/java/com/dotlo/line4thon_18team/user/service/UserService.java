@@ -1,5 +1,6 @@
 package com.dotlo.line4thon_18team.user.service;
 
+import com.dotlo.line4thon_18team.course.repository.CourseBookmarkRepository;
 import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.place.repository.SavedPlaceRepository;
@@ -32,6 +33,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final SavedPlaceRepository savedPlaceRepository;
     private final TripRepository tripRepository;
+    private final CourseBookmarkRepository courseBookmarkRepository;
     private final Clock clock;
 
     public UserResponse getMe(Long userId) {
@@ -69,12 +71,11 @@ public class UserService {
         return flushNickname(user);
     }
 
-    // 찜 기능(BE2)이 생기기 전까지 저장한 코스는 0
     public MyStatsResponse getMyStats(Long userId) {
         findUser(userId);
         return new MyStatsResponse(
                 savedPlaceRepository.countInMyTrips(userId),
-                0,
+                courseBookmarkRepository.countByUserId(userId),
                 tripRepository.countEndedMyTrips(userId, LocalDate.now(clock)));
     }
 

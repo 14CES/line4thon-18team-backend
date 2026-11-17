@@ -25,4 +25,12 @@ public interface CourseBookmarkRepository extends JpaRepository<CourseBookmark, 
     // 최근에 찜한 순
     @Query("select b.course.id from CourseBookmark b where b.user.id = :userId order by b.id desc")
     List<Long> findCourseIdsByUserId(@Param("userId") long userId);
+
+    // 마이 통계 "저장한 코스"
+    long countByUserId(Long userId);
+
+    // 회원 탈퇴
+    @Modifying
+    @Query("delete from CourseBookmark b where b.user.id = :userId")
+    void deleteAllByUserId(@Param("userId") long userId);
 }
