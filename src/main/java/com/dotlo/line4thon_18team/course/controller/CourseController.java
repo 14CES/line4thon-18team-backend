@@ -12,6 +12,7 @@ import com.dotlo.line4thon_18team.place.PlacePhotos.Photo;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.net.URI;
 import java.util.List;
 
-/** 공용 코스 원본 조회는 개인별 정보가 없으므로 로그인 없이 둘러볼 수 있다. 가져오기만 로그인이 필요하다. */
+/** 공용 코스 원본 조회는 개인별 정보가 없으므로 로그인 없이 둘러볼 수 있다. 가져오기와 찜은 로그인이 필요하다. */
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/courses")
@@ -60,5 +61,25 @@ public class CourseController {
                                                              @Valid @RequestBody CourseImportRequest request) {
         CourseImportResponse response = courseImportService.importAsNewTrip(userId, courseId, request);
         return ResponseEntity.created(URI.create("/api/trips/" + response.tripId())).body(response);
+    }
+
+    // 내가 찜한 코스 (최근에 찜한 순). 코스 목록과 같은 모양
+    @GetMapping("/bookmarks")
+    public List<CourseSummaryResponse> bookmarks(@LoginUser Long userId) {
+        return courseService.bookmarks(userId);
+    }
+
+    // 코스 찜 → 204. 이미 찜했어도 204, 없는 코스는 404
+    @PostMapping("/{courseId}/bookmark")
+    public ResponseEntity<Void> bookmark(@LoginUser Long userId, @PathVariable long courseId) {
+        courseService.bookmark(userId, courseId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // 찜 해제 → 204. 찜하지 않았어도 204
+    @DeleteMapping("/{courseId}/bookmark")
+    public ResponseEntity<Void> unbookmark(@LoginUser Long userId, @PathVariable long courseId) {
+        courseService.unbookmark(userId, courseId);
+        return ResponseEntity.noContent().build();
     }
 }

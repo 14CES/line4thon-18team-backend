@@ -2,6 +2,7 @@ package com.dotlo.line4thon_18team.place.service;
 
 import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.error.ErrorCode;
+import com.dotlo.line4thon_18team.place.dto.MySavedPlaceResponse;
 import com.dotlo.line4thon_18team.place.dto.PlaceImportResponse;
 import com.dotlo.line4thon_18team.place.dto.PopularPlaceResponse;
 import com.dotlo.line4thon_18team.place.dto.SavedPlaceListResponse;
@@ -73,6 +74,11 @@ public class SavedPlaceService {
         return counts.stream()
                 .map(count -> PopularPlaceResponse.of(latest.get(count.placeId()), count.trips()))
                 .toList();
+    }
+
+    /** 장소 찜 목록. 마이의 저장한 장소 수(countInMyTrips)와 같은 범위다. */
+    public List<MySavedPlaceResponse> getMyPlaces(Long userId) {
+        return savedPlaceRepository.findAllInMyTrips(userId).stream().map(MySavedPlaceResponse::from).toList();
     }
 
     // Takeout CSV/zip 업로드
