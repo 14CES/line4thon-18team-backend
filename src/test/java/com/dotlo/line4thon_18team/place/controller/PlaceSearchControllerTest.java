@@ -14,6 +14,7 @@ import com.dotlo.line4thon_18team.auth.jwt.JwtProvider;
 import com.dotlo.line4thon_18team.global.config.SecurityConfig;
 import com.dotlo.line4thon_18team.place.PlaceMatcher;
 import com.dotlo.line4thon_18team.place.PlaceMatcher.Candidate;
+import com.dotlo.line4thon_18team.place.service.SavedPlaceService;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.service.TripService;
 import java.util.List;
@@ -33,6 +34,7 @@ class PlaceSearchControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean TripService tripService;
     @MockitoBean PlaceMatcher placeMatcher;
+    @MockitoBean SavedPlaceService savedPlaceService;
 
     @Test
     void 여행_도시_중심_50km에서_검색() throws Exception {

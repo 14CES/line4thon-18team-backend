@@ -3,19 +3,23 @@ package com.dotlo.line4thon_18team.place.service;
 import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.place.dto.PlaceImportResponse;
+import com.dotlo.line4thon_18team.place.dto.PopularPlaceResponse;
 import com.dotlo.line4thon_18team.place.dto.SavedPlaceListResponse;
 import com.dotlo.line4thon_18team.place.dto.SavedPlaceResponse;
+import com.dotlo.line4thon_18team.place.entity.PlaceMatchStatus;
 import com.dotlo.line4thon_18team.place.entity.PlaceSource;
 import com.dotlo.line4thon_18team.place.entity.SavedPlace;
 import com.dotlo.line4thon_18team.place.importer.ImportedList;
 import com.dotlo.line4thon_18team.place.importer.ImportedPlace;
 import com.dotlo.line4thon_18team.place.link.GoogleListClient;
 import com.dotlo.line4thon_18team.place.repository.SavedPlaceRepository;
+import com.dotlo.line4thon_18team.place.repository.SavedPlaceRepository.PlaceCount;
 import com.dotlo.line4thon_18team.place.takeout.TakeoutParser;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.trip.service.TripService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +36,8 @@ import java.util.Map;
 @Transactional(readOnly = true)
 public class SavedPlaceService {
 
+    private static final int POPULAR_LIMIT = 10;
+
     private final TripService tripService;
     private final TripRepository tripRepository;
     private final SavedPlaceRepository savedPlaceRepository;
@@ -46,6 +52,27 @@ public class SavedPlaceService {
                 .map(SavedPlaceResponse::from)
                 .toList();
         return new SavedPlaceListResponse(tripId, places.size(), places);
+    }
+
+    /**
+     * 검색 화면 "○○에서 많이 담는 곳". 여행 도시에서 많은 여행이 담은 장소 순으로 최대 10개.
+     * 구글에서 확인된 장소(MATCHED)만 세고, 이 여행에 이미 담긴 장소는 뺀다. 구글을 부르지 않는다.
+     */
+    public List<PopularPlaceResponse> getPopularPlaces(Long userId, Long tripId) {
+        Trip trip = tripService.findMemberTrip(userId, tripId);   // 없는 여행·구성원이 아니면 404
+        List<PlaceCount> counts = savedPlaceRepository.countPopularInCity(trip.getCity(), tripId,
+                PlaceMatchStatus.MATCHED, PageRequest.of(0, POPULAR_LIMIT));
+        if (counts.isEmpty()) return List.of();
+
+        // 장소 정보는 가장 최근에 담긴 행 것을 쓴다
+        Map<String, SavedPlace> latest = new HashMap<>();
+        for (SavedPlace place : savedPlaceRepository.findAllByPlaceIdInAndMatchStatusOrderByIdDesc(
+                counts.stream().map(PlaceCount::placeId).toList(), PlaceMatchStatus.MATCHED)) {
+            latest.putIfAbsent(place.getPlaceId(), place);
+        }
+        return counts.stream()
+                .map(count -> PopularPlaceResponse.of(latest.get(count.placeId()), count.trips()))
+                .toList();
     }
 
     // Takeout CSV/zip 업로드
