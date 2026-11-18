@@ -51,10 +51,20 @@ class TravelTimeTest {
     void 대중교통이_없을_때_추정은_자동차_경로_기준() {
         // 대중교통 조회만 실패해도 자동차 경로가 있으면 자동차 시간 + 10분, 거리는 자동차 길 (선택 화면과 검증이 같은 값)
         assertEquals(new Leg(22, Mode.TRANSIT, true, 4800),
-                TravelTime.transitFromDrive(new Leg(12, Mode.DRIVE, false, 4800), 미도스지점, 하루카스));
+                TravelTime.transitFromDrive(new Leg(12, Mode.DRIVE, false, 4800), new Leg(46, Mode.WALK, false, 3600), 미도스지점, 하루카스));
         // 자동차도 추정치면 직선거리로 대중교통 추정
         assertEquals(TravelTime.straightLineTransit(미도스지점, 하루카스),
-                TravelTime.transitFromDrive(TravelTime.straightLineDrive(미도스지점, 하루카스), 미도스지점, 하루카스));
+                TravelTime.transitFromDrive(TravelTime.straightLineDrive(미도스지점, 하루카스), null, 미도스지점, 하루카스));
+    }
+
+    @Test
+    void 대중교통_추정이_도보보다_길면_도보_시간() {
+        // 108m인데 일방통행으로 자동차 길 1.8km(12분) → 22분이 아니라 도보 2분. 수단은 대중교통 그대로, 추정
+        assertEquals(new Leg(2, Mode.TRANSIT, true, 108),
+                TravelTime.transitFromDrive(new Leg(12, Mode.DRIVE, false, 1800), new Leg(2, Mode.WALK, false, 108), 미도스지점, 글리코사인));
+        // 자동차도 추정치일 때도 같음 (직선 대중교통 추정 11분 > 도보 2분)
+        assertEquals(new Leg(2, Mode.TRANSIT, true, 108),
+                TravelTime.transitFromDrive(TravelTime.straightLineDrive(미도스지점, 글리코사인), new Leg(2, Mode.WALK, false, 108), 미도스지점, 글리코사인));
     }
 
     // 직선거리 × 1.3
@@ -117,7 +127,7 @@ class TravelTimeTest {
         assertEquals(car.distanceMeters(), far.distanceMeters());
         assertTrue(car.distanceMeters() > 2800 && car.distanceMeters() < 8000, "자동차 m: " + car.distanceMeters());
 
-        // 사용자가 고른 수단: 먼 곳도 도보, 가까운 곳도 대중교통(일본은 자동차 + 10분 추정)
+        // 사용자가 고른 수단: 먼 곳도 도보, 가까운 곳도 대중교통(일본은 자동차 + 10분 추정, 도보보다 길면 도보 시간)
         Leg longWalk = service.walk(미도스지점, 하루카스);
         assertEquals(Mode.WALK, longWalk.mode());
         assertFalse(longWalk.estimated());
@@ -125,6 +135,7 @@ class TravelTimeTest {
         Leg shortTransit = service.transit(미도스지점, 글리코사인, noonKst);
         assertEquals(Mode.TRANSIT, shortTransit.mode());
         assertTrue(shortTransit.estimated());
+        assertEquals(near.minutes(), shortTransit.minutes());
 
         // 이동 수단 선택 시트: 도보·대중교통·자동차 순서
         List<Leg> options = service.options(미도스지점, 하루카스, noonKst);
