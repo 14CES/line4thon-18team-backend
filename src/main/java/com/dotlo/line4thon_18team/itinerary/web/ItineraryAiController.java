@@ -39,10 +39,14 @@ public class ItineraryAiController {
      *
      * <p>AI 호출과 이동시간 조회가 들어가서 응답이 수십 초 걸릴 수 있다.
      * 장소가 하나도 매칭되지 않았으면 400, 숙소를 일부 밤만 넣었으면 400이다.
+     *
+     * <p>본문은 선택. {@code savedPlaceIds}를 보내면 고른 장소 중 매칭된 것만 쓴다. 빈 목록이거나 이 여행에 없는 id가
+     * 섞이면 AI를 부르기 전에 400이다.
      */
     @PostMapping("/generate")
-    public GeneratedItineraryVersion generate(@PathVariable("tripId") long tripId, @LoginUser Long userId) {
-        return generationService.generateAndSave(tripId, userId);
+    public GeneratedItineraryVersion generate(@PathVariable("tripId") long tripId, @LoginUser Long userId,
+                                              @Valid @RequestBody(required = false) ItineraryGenerateRequest request) {
+        return generationService.generateAndSave(tripId, userId, request == null ? null : request.savedPlaceIds());
     }
 
     /**
