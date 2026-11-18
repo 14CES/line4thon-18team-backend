@@ -67,7 +67,7 @@ public class TravelTime {
             if (walk != null && minutes(walk) <= WALK_MAX_MIN) return leg(walk, Mode.WALK);
 
             Route drive = route(from, to, "DRIVE", null);
-            if (drive != null) return transitFromDrive(leg(drive, Mode.DRIVE), from, to);
+            if (drive != null) return transitFromDrive(leg(drive, Mode.DRIVE), walk == null ? null : leg(walk, Mode.WALK), from, to);
         } catch (RestClientException e) {
             log.warn("Routes API 오류, 직선거리로 추정: {}", e.getMessage());
         }
@@ -94,7 +94,7 @@ public class TravelTime {
     */
     public Leg transit(LatLng from, LatLng to, Instant departure) {
         Leg transit = transitRoute(from, to, departure);
-        return transit != null ? transit : transitFromDrive(drive(from, to), from, to);
+        return transit != null ? transit : transitFromDrive(drive(from, to), walk(from, to), from, to);
     }
 
     /*
@@ -102,10 +102,11 @@ public class TravelTime {
     자동차 경로를 한 번만 불러서 대중교통 추정에도 쓴다 (구글 호출 최대 3번)
     */
     public List<Leg> options(LatLng from, LatLng to, Instant departure) {
+        Leg walk = walk(from, to);
         Leg drive = drive(from, to);
         Leg transit = transitRoute(from, to, departure);
-        if (transit == null) transit = transitFromDrive(drive, from, to);
-        return List.of(walk(from, to), transit, drive);
+        if (transit == null) transit = transitFromDrive(drive, walk, from, to);
+        return List.of(walk, transit, drive);
     }
 
     // 대중교통 경로. 경로가 없거나(일본 등) API 오류면 null
@@ -147,10 +148,13 @@ public class TravelTime {
     }
 
     // 대중교통 경로가 없을 때: 자동차 시간 + 10분, 거리는 자동차 길. 자동차도 추정치(경로 없음·오류)면 직선거리로 추정
+    // 이 추정이 도보보다 길면 도보 시간·거리 (예: 108m인데 일방통행으로 자동차 길 1.8km → 22분). walk: 모르면 null
     // 자동 선택(get), 고른 대중교통(transit), 선택 화면(options)이 모두 이 규칙을 씀
-    static Leg transitFromDrive(Leg drive, LatLng from, LatLng to) {
-        return drive.estimated() ? straightLineTransit(from, to)
+    static Leg transitFromDrive(Leg drive, Leg walk, LatLng from, LatLng to) {
+        Leg transit = drive.estimated() ? straightLineTransit(from, to)
                 : new Leg(drive.minutes() + TRANSIT_EXTRA_MIN, Mode.TRANSIT, true, drive.distanceMeters());
+        return walk != null && walk.minutes() < transit.minutes()
+                ? new Leg(walk.minutes(), Mode.TRANSIT, true, walk.distanceMeters()) : transit;
     }
 
     // ponytail: 굽은 길 1.3배, 도보 분당 80m, 대중교통 분당 300m + 10분. 실제 값과 비교해서 조정.
