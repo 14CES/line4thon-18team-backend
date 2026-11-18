@@ -8,8 +8,10 @@ import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.place.OpeningHours;
 import com.dotlo.line4thon_18team.place.OpeningHours.Hours;
 import com.dotlo.line4thon_18team.place.PlaceCategory;
+import com.dotlo.line4thon_18team.place.PlaceDetails;
 import com.dotlo.line4thon_18team.place.PlaceMatcher;
 import com.dotlo.line4thon_18team.place.PlaceMatcher.Candidate;
+import com.dotlo.line4thon_18team.place.dto.PlaceDetailResponse;
 import com.dotlo.line4thon_18team.place.dto.PlaceHoursResponse;
 import com.dotlo.line4thon_18team.place.dto.PopularPlaceResponse;
 import com.dotlo.line4thon_18team.place.service.SavedPlaceService;
@@ -35,6 +37,7 @@ public class PlaceSearchController {
     private final TripService tripService;
     private final PlaceMatcher placeMatcher;
     private final OpeningHours openingHours;
+    private final PlaceDetails placeDetails;
     private final SavedPlaceService savedPlaceService;
 
     // 장소·숙소 검색. 여행 도시 중심 50km 안, 최대 10개. 결과가 없으면 빈 목록 (FE가 주소 직접 입력으로 안내)
@@ -62,7 +65,9 @@ public class PlaceSearchController {
         if (category == PlaceCategory.OTHER) throw new BusinessException(ErrorCode.INVALID_INPUT, "기타 유형으로는 추천할 수 없습니다.");
         City city = memberTripCity(userId, tripId);
         // 여행 도시 밖(잘못된 좌표, NaN 포함)은 구글을 부르지 않음. NaN 은 비교가 늘 false 라 <= 로 확인
-        if (!(PlaceMatcher.meters(city.lat(), city.lng(), lat, lng) <= SEARCH_RADIUS_M)) {
+        // 위도·경도 범위도 먼저 봄 (경도에 360을 더해도 거리 계산은 같아서 반경 검사를 통과함)
+        if (!(Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+                && PlaceMatcher.meters(city.lat(), city.lng(), lat, lng) <= SEARCH_RADIUS_M)) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "여행 도시 근처 좌표가 아닙니다.");
         }
         return placeMatcher.searchNearby(lat, lng, category);
@@ -77,6 +82,14 @@ public class PlaceSearchController {
         Hours hours = openingHours.get(placeId);
         if (hours == null) return ResponseEntity.noContent().build();
         return ResponseEntity.ok(PlaceHoursResponse.of(hours, ZonedDateTime.now(ZoneId.of(city.timezone()))));
+    }
+
+    // 장소 상세 (평점·리뷰 수·소개·주소·좌표 + 이 여행에 저장했는지). 영업시간은 /hours, 사진은 /photos
+    // ponytail: 열 때마다 구글 Place Details(Enterprise + Atmosphere) 요금. 많이 열리면 장소별 캐시
+    @GetMapping("/api/places/{placeId}")
+    public PlaceDetailResponse detail(@LoginUser Long userId, @PathVariable String placeId, @RequestParam Long tripId) {
+        memberTripCity(userId, tripId);
+        return PlaceDetailResponse.of(placeDetails.get(placeId), savedPlaceService.findSavedPlaceId(tripId, placeId));
     }
 
     // 없는 여행·구성원이 아니면 404, 지원하지 않는 도시면 400

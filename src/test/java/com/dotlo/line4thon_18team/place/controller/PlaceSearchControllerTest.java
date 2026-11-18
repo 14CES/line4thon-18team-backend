@@ -16,7 +16,11 @@ import com.dotlo.line4thon_18team.global.config.SecurityConfig;
 import com.dotlo.line4thon_18team.place.OpeningHours;
 import com.dotlo.line4thon_18team.place.OpeningHours.Hours;
 import com.dotlo.line4thon_18team.place.OpeningHours.Range;
+import com.dotlo.line4thon_18team.global.error.BusinessException;
+import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.place.PlaceCategory;
+import com.dotlo.line4thon_18team.place.PlaceDetails;
+import com.dotlo.line4thon_18team.place.PlaceDetails.Detail;
 import com.dotlo.line4thon_18team.place.PlaceMatcher;
 import com.dotlo.line4thon_18team.place.PlaceMatcher.Candidate;
 import com.dotlo.line4thon_18team.place.service.SavedPlaceService;
@@ -43,6 +47,7 @@ class PlaceSearchControllerTest {
     @MockitoBean TripService tripService;
     @MockitoBean PlaceMatcher placeMatcher;
     @MockitoBean OpeningHours openingHours;
+    @MockitoBean PlaceDetails placeDetails;
     @MockitoBean SavedPlaceService savedPlaceService;
 
     @Test
@@ -106,6 +111,10 @@ class PlaceSearchControllerTest {
                         .header("X-User-Id", "1"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+        mvc.perform(get("/api/places/nearby").param("tripId", "7").param("lat", "34.6687").param("lng", "495.5013")   // 경도 + 360
+                        .header("X-User-Id", "1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
         verify(placeMatcher, never()).searchNearby(anyDouble(), anyDouble(), any());
     }
 
@@ -126,6 +135,49 @@ class PlaceSearchControllerTest {
 
         mvc.perform(get("/api/places/{placeId}/hours", "street").param("tripId", "7").header("X-User-Id", "1"))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void 장소_상세는_구글_정보와_이_여행에_저장한_장소_id() throws Exception {
+        osakaTrip();
+        when(placeDetails.get("sannen")).thenReturn(new Detail("sannen", "산넨자카", PlaceCategory.SIGHTSEEING, 4.4, 17380,
+                "기념품 가판대와 전통 일본 건축물이 늘어선 언덕 위의 번화한 보행자 전용 거리입니다.",
+                "2-chōme-211 Kiyomizu, Higashiyama Ward, Kyoto, 605-0862 일본", 34.996, 135.781, "https://maps.google.com/?cid=1"));
+        when(savedPlaceService.findSavedPlaceId(7L, "sannen")).thenReturn(31L);
+
+        mvc.perform(get("/api/places/{placeId}", "sannen").param("tripId", "7").header("X-User-Id", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("산넨자카"))
+                .andExpect(jsonPath("$.category").value("SIGHTSEEING"))
+                .andExpect(jsonPath("$.rating").value(4.4))
+                .andExpect(jsonPath("$.reviewCount").value(17380))
+                .andExpect(jsonPath("$.summary").isString())
+                .andExpect(jsonPath("$.latitude").value(34.996))
+                .andExpect(jsonPath("$.savedPlaceId").value(31));
+    }
+
+    @Test
+    void 장소_상세_저장하지_않은_장소는_savedPlaceId_null() throws Exception {
+        osakaTrip();
+        when(placeDetails.get("harbs")).thenReturn(new Detail("harbs", "하브스 난바파크스점", PlaceCategory.CAFE, 4.2, 1398,
+                null, "Osaka", 34.66, 135.50, null));
+        when(savedPlaceService.findSavedPlaceId(7L, "harbs")).thenReturn(null);   // 목은 Long 기본값이 0이라 직접 지정
+
+        mvc.perform(get("/api/places/{placeId}", "harbs").param("tripId", "7").header("X-User-Id", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary").doesNotExist())
+                .andExpect(jsonPath("$.savedPlaceId").doesNotExist());
+    }
+
+    @Test
+    void 장소_상세_구성원이_아니면_404이고_구글을_부르지_않는다() throws Exception {
+        when(tripService.findMemberTrip(1L, 8L)).thenThrow(new BusinessException(ErrorCode.TRIP_NOT_FOUND));
+
+        mvc.perform(get("/api/places/{placeId}", "sannen").param("tripId", "8").header("X-User-Id", "1"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/places/{placeId}", "sannen").param("tripId", "7"))
+                .andExpect(status().isUnauthorized());
+        verify(placeDetails, never()).get(anyString());
     }
 
     private void osakaTrip() {
