@@ -70,13 +70,14 @@ public class ItineraryEditService {
         ValidationRun run = validationService.prepare(tripId, userId);
         LocalDate startDate = run.trip().getStartDate();
         Map<String, VisitDraft> visitsByItemId = indexVisits(current);
+        Map<String, String> previousByItemId = indexPrevious(current);
         PlanEditInput input = buildInput(run, current, request);
 
         EditedItinerary last = null;
         List<String> problems = List.of();
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             PlanEditOutput plan = llm.execute(planEditTask, input.retryWith(problems)).value();
-            ItineraryDraft draft = toDraft(plan, input, startDate, visitsByItemId);
+            ItineraryDraft draft = toDraft(plan, input, startDate, visitsByItemId, previousByItemId);
             ValidationResult validation = run.validate(draft, ValidationOrigin.AI_GENERATED);
 
             last = new EditedItinerary(draft, validation, plan.reason(), attempt);
@@ -94,6 +95,22 @@ public class ItineraryEditService {
         Map<String, VisitDraft> byItemId = new LinkedHashMap<>();
         draft.days().forEach(day -> day.visits().forEach(visit -> byItemId.put(visit.itemId(), visit)));
         return byItemId;
+    }
+
+    /*
+     * 방문마다 "어디에서 오는지"를 적어 둔다. 그날 첫 방문은 날짜(그날 출발지에서 옴), 나머지는 앞 방문의 itemId.
+     * 사용자가 고른 이동 수단(travelMode)은 이 구간에 붙은 값이라, 앞이 달라지면 그대로 쓸 수 없다.
+     */
+    private static Map<String, String> indexPrevious(ItineraryDraft draft) {
+        Map<String, String> previous = new LinkedHashMap<>();
+        for (DayDraft day : draft.days()) {
+            String from = "@" + day.date();
+            for (VisitDraft visit : day.visits()) {
+                previous.put(visit.itemId(), from);
+                from = visit.itemId();
+            }
+        }
+        return previous;
     }
 
     /*
@@ -140,17 +157,28 @@ public class ItineraryEditService {
     /*
      * itemId 로 가리킨 방문은 지금 일정의 값을 그대로 쓴다. 새로 만들면 체류시간과 예약 시각이 날아간다.
      * 모델이 지금 일정에 없는 itemId 를 적으면 PlanEditTask 검증에서 걸러지므로 여기서는 반드시 찾을 수 있다.
+     * 다만 앞 방문이 달라진 방문은 사용자가 고른 이동 수단을 비운다. 다른 구간에 그대로 붙으면 안 된다.
      */
     private static ItineraryDraft toDraft(PlanEditOutput plan, PlanEditInput input, LocalDate startDate,
-                                          Map<String, VisitDraft> visitsByItemId) {
+                                          Map<String, VisitDraft> visitsByItemId,
+                                          Map<String, String> previousByItemId) {
         List<DayDraft> days = new ArrayList<>();
         for (PlanEditOutput.Day day : plan.days()) {
             LocalDate date = startDate.plusDays(day.dayNumber() - 1L);
             List<VisitDraft> visits = new ArrayList<>();
+            String from = "@" + date;
             for (PlanEditOutput.VisitRef ref : day.visits()) {
-                visits.add(ref.isExisting()
-                        ? visitsByItemId.get(ref.itemId())
-                        : VisitDraft.of(ItineraryItemId.newId(), input.byNumber(ref.placeNumber()).placeId()));
+                VisitDraft visit;
+                if (ref.isExisting()) {
+                    visit = visitsByItemId.get(ref.itemId());
+                    if (visit.travelMode() != null && !from.equals(previousByItemId.get(visit.itemId()))) {
+                        visit = new VisitDraft(visit.itemId(), visit.placeId(), visit.stayMinutes(), visit.fixedStart());
+                    }
+                } else {
+                    visit = VisitDraft.of(ItineraryItemId.newId(), input.byNumber(ref.placeNumber()).placeId());
+                }
+                visits.add(visit);
+                from = visit.itemId();
             }
             days.add(new DayDraft(date, visits));
         }

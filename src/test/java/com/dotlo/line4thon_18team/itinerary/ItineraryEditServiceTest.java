@@ -10,6 +10,7 @@ import com.dotlo.line4thon_18team.itinerary.validation.ValidationPolicy;
 import com.dotlo.line4thon_18team.itinerary.validation.model.DayDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.model.ItineraryDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.model.PlaceInfo;
+import com.dotlo.line4thon_18team.itinerary.validation.model.TravelMode;
 import com.dotlo.line4thon_18team.itinerary.validation.model.VisitDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.support.FakePlaceInfoProvider;
 import com.dotlo.line4thon_18team.itinerary.validation.support.FakeTravelTimeProvider;
@@ -179,6 +180,68 @@ class ItineraryEditServiceTest {
 
         assertThat(result.attempts()).isEqualTo(3);
         assertThat(result.validation().summary().valid()).isFalse();
+    }
+
+    @Test
+    void 앞_방문이_달라지면_고른_이동_수단을_비운다() {
+        given(matched(DOTONBORI), matched(KUROMON), matched(OSAKA_CASTLE));
+        // 구로몬(v-bbb)은 도톤보리 다음에 가는 구간에서 DRIVE 를 골랐다
+        ItineraryDraft current = ItineraryDraft.of(
+                DayDraft.of(OsakaFixtures.DAY1,
+                        VisitDraft.of("v-aaa", DOTONBORI.placeId()),
+                        new VisitDraft("v-bbb", KUROMON.placeId(), null, null, TravelMode.DRIVE)),
+                DayDraft.of(OsakaFixtures.DAY2));
+        // 구로몬이 2일차 첫 방문이 된다. 어디에서 오는지가 달라졌다
+        llm.thenReturn("""
+                {"days": [{"dayNumber": 1, "visits": [{"itemId": "v-aaa", "placeNumber": null},
+                                                      {"itemId": null, "placeNumber": 1}]},
+                          {"dayNumber": 2, "visits": [{"itemId": "v-bbb", "placeNumber": null}]},
+                          {"dayNumber": 3, "visits": []},
+                          {"dayNumber": 4, "visits": []}], "reason": "요청대로 고쳤습니다."}
+                """);
+
+        EditedItinerary result = service.edit(1L, 7L, current, "구로몬을 둘째 날로");
+
+        assertThat(result.draft().days().get(1).visits().get(0).travelMode()).isNull();
+    }
+
+    @Test
+    void 앞_방문이_그대로면_고른_이동_수단을_유지한다() {
+        given(matched(DOTONBORI), matched(KUROMON), matched(OSAKA_CASTLE));
+        ItineraryDraft current = ItineraryDraft.of(
+                DayDraft.of(OsakaFixtures.DAY1,
+                        new VisitDraft("v-aaa", DOTONBORI.placeId(), null, null, TravelMode.TRANSIT)),
+                DayDraft.of(OsakaFixtures.DAY2,
+                        new VisitDraft("v-bbb", KUROMON.placeId(), null, null, TravelMode.DRIVE)));
+        // 1일차 끝에 장소만 하나 더 들어온다. 두 방문 모두 어디에서 오는지는 그대로다
+        llm.thenReturn("""
+                {"days": [{"dayNumber": 1, "visits": [{"itemId": "v-aaa", "placeNumber": null},
+                                                      {"itemId": null, "placeNumber": 1}]},
+                          {"dayNumber": 2, "visits": [{"itemId": "v-bbb", "placeNumber": null}]},
+                          {"dayNumber": 3, "visits": []},
+                          {"dayNumber": 4, "visits": []}], "reason": "요청대로 고쳤습니다."}
+                """);
+
+        EditedItinerary result = service.edit(1L, 7L, current, "첫날에 오사카성 넣어 주세요");
+
+        assertThat(result.draft().days().get(0).visits().get(0).travelMode()).isEqualTo(TravelMode.TRANSIT);
+        assertThat(result.draft().days().get(1).visits().get(0).travelMode()).isEqualTo(TravelMode.DRIVE);
+    }
+
+    @Test
+    void 새로_넣는_방문은_이동_수단이_비어_있다() {
+        given(matched(DOTONBORI), matched(KUROMON), matched(OSAKA_CASTLE));
+        llm.thenReturn("""
+                {"days": [{"dayNumber": 1, "visits": [{"itemId": "v-aaa", "placeNumber": null},
+                                                      {"itemId": null, "placeNumber": 1}]},
+                          {"dayNumber": 2, "visits": [{"itemId": "v-bbb", "placeNumber": null}]},
+                          {"dayNumber": 3, "visits": []},
+                          {"dayNumber": 4, "visits": []}], "reason": "요청대로 고쳤습니다."}
+                """);
+
+        EditedItinerary result = service.edit(1L, 7L, current(), "첫날에 오사카성 넣어 주세요");
+
+        assertThat(result.draft().days().get(0).visits().get(1).travelMode()).isNull();
     }
 
     // ---- 도움 함수 ----
