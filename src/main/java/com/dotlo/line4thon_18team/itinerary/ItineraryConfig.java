@@ -9,6 +9,8 @@ import com.dotlo.line4thon_18team.place.TravelTime;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Duration;
+
 /**
  * 일정 기능 빈 등록 (BE3).
  *
@@ -24,7 +26,7 @@ public class ItineraryConfig {
 
     @Bean
     public TravelTimeProvider travelTimeProvider(TravelTime travelTime) {
-        return new PlaceTravelTimeProvider(travelTime);
+        return new CachedTravelTimeProvider(new PlaceTravelTimeProvider(travelTime), Duration.ofMinutes(30));
     }
 
     @Bean
