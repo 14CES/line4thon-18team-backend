@@ -59,6 +59,12 @@ public class ItineraryGenerationService {
     // 장소 사이 이동시간의 어림값(분). 검증이 실제 경로로 계산하는 값이 아니라 AI가 하루 분량을 가늠하는 용도다
     private static final int AVERAGE_TRAVEL_MINUTES = 25;
 
+    /**
+     * 서버가 일정을 고치는 횟수. 한 번 고칠 때마다 실제 검증을 한 번 더 한다(약 3초). AI에게 다시
+     * 배치해 달라고 하는 데 20~45초가 드니, 몇 번 더 고쳐 보는 것이 싸다.
+     */
+    private static final int MAX_REPAIR_ROUNDS = 3;
+
     private final ItineraryValidationService validationService;
     private final StructuredLlmExecutor llm;
     private final PlanGenerationTask planGenerationTask;
@@ -131,8 +137,47 @@ public class ItineraryGenerationService {
                     (validateEnd - llmEnd) / 1_000_000, (validateEnd - startedAt) / 1_000_000,
                     validation.summary().valid());
 
-            last = new GeneratedItinerary(draft, validation, placeIds(plan.excluded(), input),
-                    candidates.closedPlaceIds(), attempt);
+            List<String> excluded = placeIds(plan.excluded(), input);
+            if (!validation.summary().valid()) {
+                // AI는 도착 시각을 계산할 수 없어서 영업시간 문제를 스스로 못 고친다. 서버가 방문을 옮기거나
+                // 빼서 풀리는지 먼저 보고, 풀리면 AI를 다시 부르지 않는다 (재배치는 20~45초가 더 들고,
+                // 다시 배치한 결과가 더 나쁠 때도 있다)
+                long repairStart = System.nanoTime();
+                int errorsBefore = validation.summary().errorCount();
+                List<String> dropped = new ArrayList<>();
+                int rounds = 0;
+                /*
+                 * 여러 번 나눠 고친다. 고치는 동안에는 이미 조회한 이동시간만 쓰고 새로 생긴 구간은
+                 * 직선거리로 추정하는데, 그 추정이 실제와 크게 어긋날 때가 있다. 한 번 고친 일정을 실제로
+                 * 검증하면 새 구간의 실제 이동시간이 쌓이므로, 다음 번에는 더 정확하게 고칠 수 있다.
+                 */
+                for (rounds = 1; rounds <= MAX_REPAIR_ROUNDS; rounds++) {
+                    ItineraryRepairer.Repair repair = ItineraryRepairer.repair(draft, run.repairCheck(),
+                            ItineraryRepairer.MAX_DROPS - dropped.size());
+                    if (repair.draft() == draft) {
+                        break;   // 옮기거나 빼도 나아지지 않는다
+                    }
+                    ValidationResult repaired = run.validate(repair.draft(), ValidationOrigin.AI_GENERATED);
+                    if (repaired.summary().errorCount() >= validation.summary().errorCount()) {
+                        break;   // 추정으로는 나아졌지만 실제로는 아니다. 고친 것을 버린다
+                    }
+                    draft = repair.draft();
+                    validation = repaired;
+                    dropped.addAll(repair.droppedPlaceIds());
+                    if (validation.summary().valid()) {
+                        break;
+                    }
+                }
+                if (validation.summary().errorCount() < errorsBefore) {
+                    excluded = alsoExcluded(excluded, dropped);
+                    log.info("일정 고침 tripId={} attempt={}/{} errors={}->{} dropped={} rounds={} valid={} elapsed={}ms",
+                            tripId, attempt, MAX_ATTEMPTS, errorsBefore, validation.summary().errorCount(),
+                            dropped.size(), rounds, validation.summary().valid(),
+                            (System.nanoTime() - repairStart) / 1_000_000);
+                }
+            }
+
+            last = new GeneratedItinerary(draft, validation, excluded, candidates.closedPlaceIds(), attempt);
             if (validation.summary().valid()) {
                 return last;
             }
@@ -237,6 +282,13 @@ public class ItineraryGenerationService {
 
     private static List<String> placeIds(List<Integer> numbers, PlanGenerationInput input) {
         return numbers.stream().map(number -> input.byNumber(number).placeId()).toList();
+    }
+
+    /** AI가 빼둔 장소에 서버가 뺀 장소를 더한다. 화면에서는 둘 다 '일정에 넣지 못한 장소'로 같게 보인다. */
+    private static List<String> alsoExcluded(List<String> excluded, List<String> dropped) {
+        List<String> all = new ArrayList<>(excluded);
+        dropped.stream().filter(placeId -> !all.contains(placeId)).forEach(all::add);
+        return List.copyOf(all);
     }
 
     private static List<String> describe(ValidationResult validation, ItineraryDraft draft,

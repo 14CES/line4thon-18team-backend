@@ -10,6 +10,11 @@ import com.dotlo.line4thon_18team.itinerary.validation.ItineraryValidator;
 import com.dotlo.line4thon_18team.itinerary.validation.ValidationPolicy;
 import com.dotlo.line4thon_18team.itinerary.validation.model.OpeningHours;
 import com.dotlo.line4thon_18team.itinerary.validation.model.PlaceInfo;
+import com.dotlo.line4thon_18team.itinerary.validation.result.IssueCode;
+import com.dotlo.line4thon_18team.itinerary.validation.result.IssueKind;
+import com.dotlo.line4thon_18team.itinerary.validation.result.Severity;
+import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationIssue;
+import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
 import com.dotlo.line4thon_18team.itinerary.validation.support.FakePlaceInfoProvider;
 import com.dotlo.line4thon_18team.itinerary.validation.support.FakeTravelTimeProvider;
 import com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures;
@@ -110,8 +115,8 @@ class ItineraryGenerationServiceTest {
 
     @Test
     void 검증에_걸리면_문제를_알려주고_다시_배치한다() {
-        given(matched(DOTONBORI), matched(OsakaFixtures.CAFE_CLOSED_MONDAY));
-        // 1일차(월요일)에 휴무인 카페를 넣음 → 다시 배치
+        givenUnrepairable(matched(DOTONBORI), matched(OsakaFixtures.CAFE_CLOSED_EVERY_DAY));
+        // 여행 내내 휴무인 카페를 넣음. 서버가 고쳐도 나아지지 않아서 AI에게 다시 배치를 맡긴다
         llm.thenReturn("""
                 {"days": [{"dayNumber": 1, "placeNumbers": [1, 2]},
                           {"dayNumber": 2, "placeNumbers": []},
@@ -121,10 +126,10 @@ class ItineraryGenerationServiceTest {
                 """);
         llm.thenReturn("""
                 {"days": [{"dayNumber": 1, "placeNumbers": [1]},
-                          {"dayNumber": 2, "placeNumbers": [2]},
+                          {"dayNumber": 2, "placeNumbers": []},
                           {"dayNumber": 3, "placeNumbers": []},
                           {"dayNumber": 4, "placeNumbers": []}],
-                 "excluded": []}
+                 "excluded": [2]}
                 """);
 
         GeneratedItinerary result = service.generate(1L, 7L);
@@ -137,8 +142,33 @@ class ItineraryGenerationServiceTest {
     }
 
     @Test
-    void 세_번_모두_걸리면_마지막_결과를_그대로_돌려준다() {
+    void 옮겨서_풀리는_문제는_서버가_고치고_AI를_다시_부르지_않는다() {
         given(matched(DOTONBORI), matched(OsakaFixtures.CAFE_CLOSED_MONDAY));
+        // 1일차(월요일)에 휴무인 카페를 넣음 → 서버가 다른 날로 옮긴다
+        llm.thenReturn("""
+                {"days": [{"dayNumber": 1, "placeNumbers": [1, 2]},
+                          {"dayNumber": 2, "placeNumbers": []},
+                          {"dayNumber": 3, "placeNumbers": []},
+                          {"dayNumber": 4, "placeNumbers": []}],
+                 "excluded": []}
+                """);
+
+        GeneratedItinerary result = service.generate(1L, 7L);
+
+        assertThat(llm.callCount()).isEqualTo(1);
+        assertThat(result.attempts()).isEqualTo(1);
+        assertThat(result.validation().summary().valid()).isTrue();
+        // 빼지 않고 옮기기만 한다
+        assertThat(result.draft().days()).flatExtracting(day -> day.visits()).extracting(v -> v.placeId())
+                .containsExactlyInAnyOrder(DOTONBORI.placeId(), OsakaFixtures.CAFE_CLOSED_MONDAY.placeId());
+        assertThat(result.draft().days().get(0).visits()).extracting(v -> v.placeId())
+                .containsExactly(DOTONBORI.placeId());
+        assertThat(result.excludedPlaceIds()).isEmpty();
+    }
+
+    @Test
+    void 세_번_모두_걸리면_마지막_결과를_그대로_돌려준다() {
+        givenUnrepairable(matched(DOTONBORI), matched(OsakaFixtures.CAFE_CLOSED_EVERY_DAY));
         String closedDay = """
                 {"days": [{"dayNumber": 1, "placeNumbers": [1, 2]},
                           {"dayNumber": 2, "placeNumbers": []},
@@ -153,6 +183,27 @@ class ItineraryGenerationServiceTest {
         assertThat(result.attempts()).isEqualTo(3);
         assertThat(result.validation().summary().valid()).isFalse();
         assertThat(result.draft().days().get(0).visits()).hasSize(2);
+    }
+
+    @Test
+    void 옮겨도_안_되면_서버가_장소를_빼고_넣지_못한_장소로_알려_준다() {
+        given(matched(DOTONBORI), matched(OsakaFixtures.CAFE_CLOSED_EVERY_DAY));
+        // 여행 내내 휴무라 어디로 옮겨도 안 된다 → 서버가 빼고 끝낸다 (AI 재호출 없음)
+        llm.thenReturn("""
+                {"days": [{"dayNumber": 1, "placeNumbers": [1, 2]},
+                          {"dayNumber": 2, "placeNumbers": []},
+                          {"dayNumber": 3, "placeNumbers": []},
+                          {"dayNumber": 4, "placeNumbers": []}],
+                 "excluded": []}
+                """);
+
+        GeneratedItinerary result = service.generate(1L, 7L);
+
+        assertThat(llm.callCount()).isEqualTo(1);
+        assertThat(result.validation().summary().valid()).isTrue();
+        assertThat(result.excludedPlaceIds()).containsExactly(OsakaFixtures.CAFE_CLOSED_EVERY_DAY.placeId());
+        assertThat(result.draft().days()).flatExtracting(day -> day.visits()).extracting(v -> v.placeId())
+                .containsExactly(DOTONBORI.placeId());
     }
 
     @Test
@@ -363,6 +414,19 @@ class ItineraryGenerationServiceTest {
             places[i] = saved;
         }
         given(places);
+    }
+
+    /** 서버가 옮기거나 빼도 나아지지 않는 상황. AI에게 다시 배치를 맡기는 길을 보기 위한 것 */
+    private void givenUnrepairable(SavedPlace... places) {
+        ValidationResult noBetter = ValidationResult.of(List.of(), List.of(
+                new ValidationIssue(IssueCode.CLOSED_ON_DAY, Severity.ERROR, IssueKind.SCHEDULE_CONFLICT,
+                        OsakaFixtures.DAY1, null, null, Map.of())));
+        ItineraryValidator validator = new ItineraryValidator(OsakaFixtures.places(),
+                FakeTravelTimeProvider.fixedMinutes(15), ValidationPolicy.defaults());
+        ValidationRun run = new ValidationRun(trip(), List.of(places), validator, OsakaFixtures.trip(),
+                PreferenceProfile.defaults(), placeId -> null, placeIds -> { }, ValidationPolicy.defaults(),
+                draft -> noBetter);
+        Mockito.when(validationService.prepare(1L, 7L)).thenReturn(run);
     }
 
     /** 검증은 실제 오사카 장소 정보로, AI에게 알려 줄 영업시간은 hours로 따로 준다. */

@@ -65,13 +65,23 @@ public final class ItineraryValidator {
     private final ValidationPolicy policy;
     private final TravelEstimator estimator;
     private final DayWindowCalculator windowCalculator;
+    private final boolean logTiming;
 
     public ItineraryValidator(PlaceInfoProvider places, TravelTimeProvider travel, ValidationPolicy policy) {
+        this(places, travel, policy, true);
+    }
+
+    /**
+     * @param logTiming 걸린 시간을 로그로 남길지. 일정을 고쳐 보며 수백 번 검증할 때는 false로 둔다
+     */
+    public ItineraryValidator(PlaceInfoProvider places, TravelTimeProvider travel, ValidationPolicy policy,
+                              boolean logTiming) {
         this.places = Objects.requireNonNull(places, "places");
         this.travel = Objects.requireNonNull(travel, "travel");
         this.policy = Objects.requireNonNull(policy, "policy");
         this.estimator = new TravelEstimator(policy);
         this.windowCalculator = new DayWindowCalculator(travel, policy);
+        this.logTiming = logTiming;
     }
 
     /**
@@ -100,10 +110,12 @@ public final class ItineraryValidator {
                 .sorted(Comparator.comparing(DayDraft::date))
                 .forEach(day -> timelines.add(
                         buildDay(day, windows.get(day.date()), trip, preferences, placeInfos, issues)));
-        long daysEnd = System.nanoTime();
-        log.info("검증 시간 windows={}ms places={}ms days={}ms",
-                (windowsEnd - startedAt) / 1_000_000, (placesEnd - windowsEnd) / 1_000_000,
-                (daysEnd - placesEnd) / 1_000_000);
+        if (logTiming) {
+            long daysEnd = System.nanoTime();
+            log.info("검증 시간 windows={}ms places={}ms days={}ms",
+                    (windowsEnd - startedAt) / 1_000_000, (placesEnd - windowsEnd) / 1_000_000,
+                    (daysEnd - placesEnd) / 1_000_000);
+        }
         return ValidationResult.of(timelines, issues.list);
     }
 
