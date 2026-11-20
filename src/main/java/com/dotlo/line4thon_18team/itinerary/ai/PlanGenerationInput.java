@@ -4,6 +4,7 @@ import com.dotlo.line4thon_18team.place.PlaceCategory;
 import com.dotlo.line4thon_18team.preference.domain.PreferenceProfile;
 import com.dotlo.line4thon_18team.trip.entity.Companion;
 
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Objects;
 
@@ -16,19 +17,38 @@ import java.util.Objects;
  * @param dayCount         여행 일수 (1일차 ~ dayCount일차)
  * @param companion        누구와 떠나는지. 여행 만들 때 고른 값을 배치에 참고한다 (취향 칩과는 별개)
  * @param previousProblems 지난번 배치에서 검증에 걸린 내용. 다시 배치할 때 프롬프트에 붙인다.
+ * @param capacity         하루에 쓸 수 있는 시간. 알려 주면 모델이 하루에 들어갈 양을 시간으로 가늠한다. 모르면 null
  */
 public record PlanGenerationInput(String city, int dayCount, Companion companion, PreferenceProfile preferences,
-                                  List<Candidate> places, List<String> previousProblems) {
+                                  List<Candidate> places, List<String> previousProblems, DayCapacity capacity) {
+
+    /**
+     * @param start      하루 시작 시각 (취향의 하루 시작 선호)
+     * @param end        하루 끝 시각 (숙소 복귀)
+     * @param hopMinutes 장소 사이에 드는 이동·여유 시간의 어림값
+     */
+    public record DayCapacity(LocalTime start, LocalTime end, int hopMinutes) {
+
+        public int dayMinutes() {
+            return (int) java.time.Duration.between(start, end).toMinutes();
+        }
+    }
 
     /**
      * @param number   1부터 시작하는 장소 번호. 모델은 이 번호로만 답한다.
      * @param category 장소 유형. 보강 전이거나 매칭에 실패한 장소는 비어 있어서 OTHER로 채운다.
      * @param hours    여행 일차별 영업시간 문장 ({@link HoursText}). 영업시간을 모르면 null
+     * @param stayMinutes 이 장소에 머무는 시간의 어림값. 모르면 null
      */
-    public record Candidate(int number, String placeId, String name, PlaceCategory category, String hours) {
+    public record Candidate(int number, String placeId, String name, PlaceCategory category, String hours,
+                            Integer stayMinutes) {
 
         public Candidate(int number, String placeId, String name, PlaceCategory category) {
-            this(number, placeId, name, category, null);
+            this(number, placeId, name, category, null, null);
+        }
+
+        public Candidate(int number, String placeId, String name, PlaceCategory category, String hours) {
+            this(number, placeId, name, category, hours, null);
         }
 
         public Candidate {
@@ -52,24 +72,34 @@ public record PlanGenerationInput(String city, int dayCount, Companion companion
     /** 장소 목록에 번호를 붙여 만든다. */
     public static PlanGenerationInput of(String city, int dayCount, Companion companion,
                                          PreferenceProfile preferences, List<PlaceRef> places) {
+        return of(city, dayCount, companion, preferences, places, null);
+    }
+
+    public static PlanGenerationInput of(String city, int dayCount, Companion companion,
+                                         PreferenceProfile preferences, List<PlaceRef> places, DayCapacity capacity) {
         List<Candidate> candidates = new java.util.ArrayList<>();
         for (int i = 0; i < places.size(); i++) {
             PlaceRef place = places.get(i);
-            candidates.add(new Candidate(i + 1, place.placeId(), place.name(), place.category(), place.hours()));
+            candidates.add(new Candidate(i + 1, place.placeId(), place.name(), place.category(), place.hours(),
+                    place.stayMinutes()));
         }
-        return new PlanGenerationInput(city, dayCount, companion, preferences, candidates, List.of());
+        return new PlanGenerationInput(city, dayCount, companion, preferences, candidates, List.of(), capacity);
     }
 
     /** 검증에 걸린 내용을 붙여 다시 배치하게 한다. */
     public PlanGenerationInput retryWith(List<String> problems) {
-        return new PlanGenerationInput(city, dayCount, companion, preferences, places, problems);
+        return new PlanGenerationInput(city, dayCount, companion, preferences, places, problems, capacity);
     }
 
-    /** 번호를 붙이기 전의 장소. category가 비어 있으면 OTHER로 본다. hours는 영업시간을 모르면 null. */
-    public record PlaceRef(String placeId, String name, PlaceCategory category, String hours) {
+    /** 번호를 붙이기 전의 장소. category가 비어 있으면 OTHER로 본다. hours는 영업시간을, stayMinutes는 머무는 시간을 모르면 null. */
+    public record PlaceRef(String placeId, String name, PlaceCategory category, String hours, Integer stayMinutes) {
 
         public PlaceRef(String placeId, String name, PlaceCategory category) {
-            this(placeId, name, category, null);
+            this(placeId, name, category, null, null);
+        }
+
+        public PlaceRef(String placeId, String name, PlaceCategory category, String hours) {
+            this(placeId, name, category, hours, null);
         }
 
         public PlaceRef {

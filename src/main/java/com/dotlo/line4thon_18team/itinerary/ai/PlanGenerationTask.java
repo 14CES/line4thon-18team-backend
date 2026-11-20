@@ -54,6 +54,13 @@ public class PlanGenerationTask implements LlmTask<PlanGenerationInput, PlanGene
                 '영업:'이 없는 장소는 영업시간을 모르는 것이니 제한 없이 배치한다.
             """;
 
+    /** 장소가 많은 여행에서만 붙인다. 작은 여행에 붙이면 응답만 느려진다. */
+    static final String DAY_BUDGET_RULE = """
+            14. '하루 쓸 수 있는 시간'이 있으면 그날 들어가는 장소의 '체류' 합계에, 장소 사이 이동·여유 시간을
+                (그날 장소 수 - 1)번 더한 값이 그 시간을 넘지 않게 한다. 넘을 것 같으면 장소를 다른 날로 옮기거나 excluded 에 넣는다.
+                체류가 긴 장소(120분 이상)가 있는 날은 장소 수를 줄인다. 규칙 4의 개수와 시간이 부딪치면 시간을 먼저 따른다.
+            """;
+
     private final JsonNode schema;
 
     public PlanGenerationTask(SchemaLoader schemaLoader) {
@@ -77,7 +84,11 @@ public class PlanGenerationTask implements LlmTask<PlanGenerationInput, PlanGene
 
     @Override
     public List<LlmMessage> buildMessages(PlanGenerationInput input) {
-        return List.of(LlmMessage.system(SYSTEM_PROMPT), LlmMessage.user(userPrompt(input)));
+        return List.of(LlmMessage.system(systemPrompt(input)), LlmMessage.user(userPrompt(input)));
+    }
+
+    static String systemPrompt(PlanGenerationInput input) {
+        return input.capacity() == null ? SYSTEM_PROMPT : SYSTEM_PROMPT + DAY_BUDGET_RULE;
     }
 
     static String userPrompt(PlanGenerationInput input) {
@@ -91,6 +102,11 @@ public class PlanGenerationTask implements LlmTask<PlanGenerationInput, PlanGene
         prompt.append("일정 강도: ").append(preferences.pace().label())
                 .append(" (하루 ").append(placesPerDay(preferences.pace())).append("곳 정도)\n")
                 .append("걷기: ").append(preferences.walking().label()).append('\n');
+        if (input.capacity() != null) {
+            prompt.append("하루 쓸 수 있는 시간: ").append(input.capacity().start()).append('~').append(input.capacity().end())
+                    .append(" (").append(input.capacity().dayMinutes()).append("분). 장소 사이 이동·여유는 ")
+                    .append(input.capacity().hopMinutes()).append("분씩 잡는다\n");
+        }
         if (!preferences.interests().isEmpty()) {
             prompt.append("가고 싶은 유형: ").append(labels(preferences.interests())).append('\n');
         }
@@ -106,6 +122,9 @@ public class PlanGenerationTask implements LlmTask<PlanGenerationInput, PlanGene
         for (Candidate place : input.places()) {
             prompt.append(place.number()).append(". ").append(sanitize(place.name()))
                     .append(" (").append(place.category().label()).append(')');
+            if (input.capacity() != null && place.stayMinutes() != null) {
+                prompt.append(" 체류 ").append(place.stayMinutes()).append('분');
+            }
             if (place.hours() != null) {
                 prompt.append(" 영업: ").append(place.hours());
             }
@@ -125,6 +144,15 @@ public class PlanGenerationTask implements LlmTask<PlanGenerationInput, PlanGene
             case COUPLE -> "연인";
             case FRIEND -> "친구";
             case FAMILY -> "가족";
+        };
+    }
+
+    /** 하루에 넣는 개수의 위쪽 끝. 일정 강도 문구({@link #placesPerDay})와 같은 값이다. */
+    public static int maxPlacesPerDay(TravelPace pace) {
+        return switch (pace) {
+            case RELAXED -> 4;
+            case NORMAL -> 5;
+            case PACKED -> 7;
         };
     }
 
