@@ -1,3 +1,6 @@
+# 프로젝트 이름 고정 (볼륨 이름이 폴더 이름에 따라 바뀌지 않게)
+name: line4thon_18team
+
 services:
   mysql:
     image: mysql:8.4

@@ -14,7 +14,7 @@ line4thon 18팀의 백엔드 레포지토리입니다.
 | 구글 로그인 / 가입 | 구글 계정으로 로그인, 약관 동의와 닉네임, 캐릭터 설정 |
 | 장소 가져오기 | Google Takeout(저장됨) CSV/zip 업로드, 구글맵 공유 리스트 링크로 저장 장소 가져오기 |
 | 장소 보강 | 가져온 장소를 구글 장소 정보(좌표, 카테고리, 영업시간)와 매칭, 도시 밖/폐업 장소 구분 |
-| AI 일정 생성 | 저장 장소와 취향으로 AI가 날짜별 일정을 만들고, 이동 시간과 영업시간으로 검증 |
+| AI 일정 생성 | 저장 장소와 취향, 영업시간을 함께 넘겨 AI가 날짜별로 배치하고, 서버가 이동 시간과 영업시간으로 검증 |
 | 일정 수정 | 말로 수정 요청(AI), 직접 편집, 구간 이동 수단 선택, 버전 기록과 되돌리기 |
 | 예약 정보 | 항공편(편명으로 조회), 숙소, 렌터카 |
 | 동행 | 초대 링크, 구성원 권한, 채팅, AI 의견 조율, 투표, 좋아요/댓글, 알림 |
@@ -106,6 +106,7 @@ cp .env.example .env
 | OPENAI_API_KEY | OpenAI API 키 (비우면 AI 기능은 실패하거나 기본값으로 진행) | sk-... |
 | OPENAI_MODEL | 사용할 OpenAI 모델 | gpt-5-mini |
 | OPENAI_REASONING_EFFORT | AI가 생각하는 양 (minimal / low / medium / high). 비우면 모델 기본값. 낮을수록 빠름 | low |
+| OPENAI_BASE_URL | OpenAI API 주소 (거의 안 바꿈) | https://api.openai.com/v1 |
 | AERODATABOX_API_KEY | 항공편 조회 API 키 (비우면 항공편 찾기 실패) | (팀원에게 따로 받기) |
 | JPA_SHOW_SQL | 실행되는 SQL 로그 (로컬만 true, 배포 서버는 넣지 않기) | true |
 | TZ | 서버 시간대 (배포 서버만, 로컬은 안 넣어도 됨) | Asia/Seoul |
@@ -114,9 +115,10 @@ cp .env.example .env
 
 ### 3. MySQL 실행
 ```bash
-docker compose -p line4thon_18team up -d
+docker compose up -d
 ```
-- 처음 실행할 때 비밀번호가 정해집니다. 이후에 `.env`의 DB 비밀번호를 바꾸려면 `docker compose -p line4thon_18team down -v`로 DB를 초기화해야 합니다.
+- 처음 실행할 때 비밀번호가 정해집니다. 이후에 `.env`의 DB 비밀번호를 바꾸려면 `docker compose down -v`로 DB를 초기화해야 합니다.
+- 프로젝트 이름은 `docker-compose.yml`에 `line4thon_18team`으로 고정되어 있습니다. 예전에 이름 없이 띄운 적이 있으면 DB가 새로 만들어져서 비어 보일 수 있어요.
 - 컴퓨터를 껐다 켜면 **Docker Desktop을 먼저 실행**하세요.
 
 ### 4. 서버 실행
@@ -142,6 +144,10 @@ curl -H "X-User-Id: 1" http://localhost:8080/api/users/me
 - 실제 구글/항공편 API를 부르는 테스트는 기본으로 건너뜁니다. 직접 돌리려면 환경변수로 키를 넣고 실행합니다 (요금이 나갈 수 있어요).
 ```bash
 GOOGLE_MAPS_API_KEY=... ./gradlew test --tests "*TravelTimeTest"
+```
+PowerShell에서는 이렇게 씁니다.
+```powershell
+$env:GOOGLE_MAPS_API_KEY="..."; ./gradlew test --tests "*TravelTimeTest"
 ```
 
 ## 🌐 배포
