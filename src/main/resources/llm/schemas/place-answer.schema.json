@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "description": "장소에 대한 질문의 답변",
+  "additionalProperties": false,
+  "required": ["answer"],
+  "properties": {
+    "answer": {
+      "type": "string",
+      "description": "한국어 답변. 제공된 장소 정보에 있는 내용만 쓴다. 정보가 없으면 모른다고 말한다"
+    }
+  }
+}
