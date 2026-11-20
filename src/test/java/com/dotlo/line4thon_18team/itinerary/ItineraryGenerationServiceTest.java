@@ -320,6 +320,51 @@ class ItineraryGenerationServiceTest {
 
     // ---- helpers ----
 
+    @Test
+    void 장소가_일수에_비해_많으면_하루_쓸_수_있는_시간과_체류_시간을_알려_준다() {
+        givenCrowded(21);   // 4일 × 하루 최대 5곳 = 20곳을 넘는다
+        llm.thenReturn(allExcluded(21));
+
+        service.generate(1L, 7L);
+
+        // 시스템 프롬프트의 규칙 14에도 같은 말이 있어서 사용자 프롬프트(두 번째 메시지)만 본다
+        String prompt = llm.requests().get(0).messages().get(1).content();
+        assertThat(prompt).contains("하루 쓸 수 있는 시간: 09:30~21:30 (720분)").contains("체류 90분");
+    }
+
+    @Test
+    void 장소가_많지_않으면_하루_시간을_알리지_않는다() {
+        givenCrowded(20);
+        llm.thenReturn(allExcluded(20));
+
+        service.generate(1L, 7L);
+
+        String prompt = llm.requests().get(0).messages().get(1).content();
+        assertThat(prompt).doesNotContain("하루 쓸 수 있는 시간").doesNotContain("체류 90분");
+    }
+
+    private static String allExcluded(int count) {
+        String numbers = java.util.stream.IntStream.rangeClosed(1, count)
+                .mapToObj(String::valueOf).collect(java.util.stream.Collectors.joining(", "));
+        return "{\"days\": [{\"dayNumber\": 1, \"placeNumbers\": []}, {\"dayNumber\": 2, \"placeNumbers\": []},"
+                + " {\"dayNumber\": 3, \"placeNumbers\": []}, {\"dayNumber\": 4, \"placeNumbers\": []}],"
+                + " \"excluded\": [" + numbers + "]}";
+    }
+
+    /** 서로 다른 place ID를 가진 매칭된 장소를 count개 만든다. 모두 관광지라 체류 90분. */
+    private void givenCrowded(int count) {
+        SavedPlace[] places = new SavedPlace[count];
+        for (int i = 0; i < count; i++) {
+            SavedPlace saved = Mockito.mock(SavedPlace.class);
+            Mockito.when(saved.getMatchStatus()).thenReturn(PlaceMatchStatus.MATCHED);
+            Mockito.when(saved.getPlaceId()).thenReturn("x" + i);
+            Mockito.when(saved.getName()).thenReturn("장소" + i);
+            Mockito.when(saved.getCategory()).thenReturn(com.dotlo.line4thon_18team.place.PlaceCategory.SIGHTSEEING);
+            places[i] = saved;
+        }
+        given(places);
+    }
+
     /** 검증은 실제 오사카 장소 정보로, AI에게 알려 줄 영업시간은 hours로 따로 준다. */
     private void givenWithHours(Map<String, OpeningHours> hours, SavedPlace... places) {
         FakePlaceInfoProvider provider = OsakaFixtures.places();

@@ -82,13 +82,15 @@ public class ItineraryValidationService {
                 new RunScopedTravelTimeProvider(travelTimeProvider),   // 이동시간은 이 요청 안에서만 재사용 (약관상 요청 간 저장 불가)
                 validationPolicy);
         return new ValidationRun(trip, places, validator, tripContext(trip, tripId),
-                preferenceService.profileOrDefault(tripId, userId), placeInfo::hoursOf, placeInfo::prefetchHours);
+                preferenceService.profileOrDefault(tripId, userId), placeInfo::hoursOf, placeInfo::prefetchHours,
+                validationPolicy);
     }
 
     /**
      * 검증 한 판에 필요한 것들. 같은 여행을 여러 번 검증해도 조회는 한 번만 한다.
      *
      * @param hoursOf placeId의 영업시간. AI에게 알려 줄 때와 검증이 같은 조회를 쓴다. 모르면 null
+     * @param policy 하루 시간·체류 시간 같은 계산 규칙. AI에게 하루에 들어갈 양을 알려 줄 때 검증과 같은 값을 쓴다
      * @param prefetchHours 이 placeId들의 영업시간을 미리 동시에 조회해 둔다. AI에게 여러 장소의 영업시간을 알리기 전에 부른다
      */
     record ValidationRun(Trip trip,
@@ -97,7 +99,15 @@ public class ItineraryValidationService {
                          TripContext context,
                          PreferenceProfile preferences,
                          Function<String, com.dotlo.line4thon_18team.itinerary.validation.model.OpeningHours> hoursOf,
-                         Consumer<Collection<String>> prefetchHours) {
+                         Consumer<Collection<String>> prefetchHours,
+                         ValidationPolicy policy) {
+
+        ValidationRun(Trip trip, List<SavedPlace> places, ItineraryValidator validator, TripContext context,
+                      PreferenceProfile preferences,
+                      Function<String, com.dotlo.line4thon_18team.itinerary.validation.model.OpeningHours> hoursOf,
+                      Consumer<Collection<String>> prefetchHours) {
+            this(trip, places, validator, context, preferences, hoursOf, prefetchHours, ValidationPolicy.defaults());
+        }
 
         ValidationRun(Trip trip, List<SavedPlace> places, ItineraryValidator validator, TripContext context,
                       PreferenceProfile preferences,

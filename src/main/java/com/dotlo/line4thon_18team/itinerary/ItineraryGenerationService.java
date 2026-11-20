@@ -16,8 +16,10 @@ import com.dotlo.line4thon_18team.itinerary.validation.model.VisitDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
 import com.dotlo.line4thon_18team.itinerary.version.dto.ItineraryVersionView;
 import com.dotlo.line4thon_18team.itinerary.version.service.ItineraryService;
+import com.dotlo.line4thon_18team.place.PlaceCategory;
 import com.dotlo.line4thon_18team.place.entity.PlaceMatchStatus;
 import com.dotlo.line4thon_18team.place.entity.SavedPlace;
+import com.dotlo.line4thon_18team.preference.domain.PreferenceProfile;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -54,6 +56,8 @@ public class ItineraryGenerationService {
 
     /** 처음 배치 1회 + 검증에 걸렸을 때 다시 배치 2회 (명세서: 내부에서 검증/최대 2회 재생성) */
     private static final int MAX_ATTEMPTS = 3;
+    // 장소 사이 이동시간의 어림값(분). 검증이 실제 경로로 계산하는 값이 아니라 AI가 하루 분량을 가늠하는 용도다
+    private static final int AVERAGE_TRAVEL_MINUTES = 25;
 
     private final ItineraryValidationService validationService;
     private final StructuredLlmExecutor llm;
@@ -109,7 +113,8 @@ public class ItineraryGenerationService {
         }
         Trip trip = run.trip();
         PlanGenerationInput input = PlanGenerationInput.of(trip.getCity(), dayCount(trip), trip.getCompanion(),
-                run.preferences(), candidates.open());
+                run.preferences(), candidates.open(),
+                capacity(run, candidates.open().size(), dayCount(trip)));
 
         GeneratedItinerary last = null;
         List<String> problems = List.of();
@@ -179,10 +184,26 @@ public class ItineraryGenerationService {
                 }
                 continue;
             }
-            open.add(new PlanGenerationInput.PlaceRef(place.getPlaceId(), place.getName(), place.getCategory(),
-                    HoursText.forTrip(hours, trip.getStartDate(), dayCount)));
+            PlaceCategory category = place.getCategory() == null ? PlaceCategory.OTHER : place.getCategory();
+            open.add(new PlanGenerationInput.PlaceRef(place.getPlaceId(), place.getName(), category,
+                    HoursText.forTrip(hours, trip.getStartDate(), dayCount),
+                    run.policy().stayMinutes(category, run.preferences().pace())));
         }
         return new Candidates(open, closed);
+    }
+
+    /**
+     * AI에게 알려 줄 하루 분량. 검증이 쓰는 하루 시작·끝과 방문 사이 여유를 같이 쓴다.
+     * 장소가 하루 개수 기준으로도 넘칠 만큼 많을 때만 알린다. 작은 여행은 AI가 따질 것만 늘어 응답이 느려진다
+     * (장소 8곳 3일에서 AI 응답이 평균 약 9초 → 약 16초).
+     */
+    private static PlanGenerationInput.DayCapacity capacity(ValidationRun run, int placeCount, int dayCount) {
+        PreferenceProfile preferences = run.preferences();
+        if (placeCount <= dayCount * PlanGenerationTask.maxPlacesPerDay(preferences.pace())) {
+            return null;
+        }
+        return new PlanGenerationInput.DayCapacity(run.policy().dayStart(preferences.dayStart()), run.policy().dayEnd(),
+                run.policy().bufferMinutes(preferences.pace()) + AVERAGE_TRAVEL_MINUTES);
     }
 
     /** 방문이 하나도 없는 일정. 모든 날짜를 빈 날로 채운다. */
