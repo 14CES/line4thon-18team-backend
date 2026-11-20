@@ -38,8 +38,12 @@ public record PlanEditInput(String city, int dayCount, PreferenceProfile prefere
         }
     }
 
-    /** 지금 일정에 들어 있는 방문 한 건. */
-    public record CurrentVisit(String itemId, String placeId, String name, PlaceCategory category) {
+    /** 지금 일정에 들어 있는 방문 한 건. hours는 여행 일차별 영업시간 문장이고 모르면 null. */
+    public record CurrentVisit(String itemId, String placeId, String name, PlaceCategory category, String hours) {
+
+        public CurrentVisit(String itemId, String placeId, String name, PlaceCategory category) {
+            this(itemId, placeId, name, category, null);
+        }
 
         public CurrentVisit {
             category = category == null ? PlaceCategory.OTHER : category;
@@ -78,7 +82,8 @@ public record PlanEditInput(String city, int dayCount, PreferenceProfile prefere
             if (inItinerary.contains(place.placeId()) || !numbered.add(place.placeId())) {
                 continue;
             }
-            candidates.add(new Candidate(candidates.size() + 1, place.placeId(), place.name(), place.category()));
+            candidates.add(new Candidate(candidates.size() + 1, place.placeId(), place.name(), place.category(),
+                    place.hours()));
         }
         return new PlanEditInput(city, dayCount, preferences, currentDays, candidates, request, List.of());
     }

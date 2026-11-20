@@ -3,6 +3,7 @@ package com.dotlo.line4thon_18team.itinerary;
 import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.llm.StructuredLlmExecutor;
 import com.dotlo.line4thon_18team.itinerary.ItineraryValidationService.ValidationRun;
+import com.dotlo.line4thon_18team.itinerary.ai.HoursText;
 import com.dotlo.line4thon_18team.itinerary.ai.PlanEditInput;
 import com.dotlo.line4thon_18team.itinerary.ai.PlanEditInput.CurrentDay;
 import com.dotlo.line4thon_18team.itinerary.ai.PlanEditInput.CurrentVisit;
@@ -135,6 +136,8 @@ public class ItineraryEditService {
                 .filter(place -> place.getMatchStatus() == PlaceMatchStatus.MATCHED && place.getPlaceId() != null)
                 .forEach(place -> savedByPlaceId.putIfAbsent(place.getPlaceId(), place));
 
+        run.prefetchHours().accept(savedByPlaceId.keySet());   // 장소가 많아도 조회를 동시에
+
         Map<LocalDate, List<VisitDraft>> byDate = new LinkedHashMap<>();
         current.days().forEach(day -> byDate.put(day.date(), day.visits()));
 
@@ -148,7 +151,8 @@ public class ItineraryEditService {
                 // 저장 장소에서 지워진 장소는 이름이 없다. 검증기가 PLACE_INFO_MISSING 으로 잡는다
                 visits.add(new CurrentVisit(visit.itemId(), visit.placeId(),
                         place == null ? visit.placeId() : place.getName(),
-                        place == null ? null : place.getCategory()));
+                        place == null ? null : place.getCategory(),
+                        place == null ? null : hoursText(run, visit.placeId(), trip, dayCount)));
                 inItinerary.add(visit.placeId());
             }
             currentDays.add(new CurrentDay(dayNumber, visits));
@@ -156,10 +160,16 @@ public class ItineraryEditService {
 
         List<PlaceRef> addable = savedByPlaceId.values().stream()
                 .filter(place -> !inItinerary.contains(place.getPlaceId()))
-                .map(place -> new PlaceRef(place.getPlaceId(), place.getName(), place.getCategory()))
+                .map(place -> new PlaceRef(place.getPlaceId(), place.getName(), place.getCategory(),
+                        hoursText(run, place.getPlaceId(), trip, dayCount)))
                 .toList();
 
         return PlanEditInput.of(trip.getCity(), dayCount, run.preferences(), currentDays, addable, request);
+    }
+
+    /** AI에게 알려 줄 일차별 영업시간. 모르면 null. 검증이 쓰는 조회를 같이 쓴다. */
+    private static String hoursText(ValidationRun run, String placeId, Trip trip, int dayCount) {
+        return HoursText.forTrip(run.hoursOf().apply(placeId), trip.getStartDate(), dayCount);
     }
 
     /*

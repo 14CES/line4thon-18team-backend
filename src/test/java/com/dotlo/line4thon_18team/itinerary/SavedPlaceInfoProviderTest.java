@@ -16,6 +16,9 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -94,6 +97,63 @@ class SavedPlaceInfoProviderTest {
         provider.findPlaces(List.of("p1"));
 
         assertThat(calls.get()).isEqualTo(1);
+    }
+
+    @Test
+    void 미리_조회하면_여러_장소를_동시에_한_번씩_조회한다() {
+        // 세 조회가 서로를 기다린다. 순서대로 조회하면 첫 조회가 시간 안에 짝을 못 만나 false가 된다
+        CountDownLatch together = new CountDownLatch(3);
+        List<Boolean> metTogether = new CopyOnWriteArrayList<>();
+        AtomicInteger calls = new AtomicInteger();
+        SavedPlaceInfoProvider provider = new SavedPlaceInfoProvider(List.of(), placeId -> {
+            calls.incrementAndGet();
+            together.countDown();
+            try {
+                metTogether.add(together.await(3, TimeUnit.SECONDS));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return days(Map.of(DayOfWeek.MONDAY, List.of(new Range(10 * 60, 22 * 60))));
+        });
+
+        provider.prefetchHours(List.of("p1", "p2", "p3", "p1"));
+
+        assertThat(metTogether).containsExactly(true, true, true);
+        assertThat(provider.hoursOf("p2").describe(MONDAY)).isEqualTo("10:00-22:00");
+        assertThat(calls.get()).isEqualTo(3);
+    }
+
+    @Test
+    void 미리_조회에_실패한_장소는_미확인으로_두고_나머지는_채운다() {
+        AtomicInteger calls = new AtomicInteger();
+        SavedPlaceInfoProvider provider = new SavedPlaceInfoProvider(List.of(), placeId -> {
+            calls.incrementAndGet();
+            if (placeId.equals("p2")) {
+                throw new IllegalStateException("할당량");
+            }
+            return days(Map.of(DayOfWeek.MONDAY, List.of(new Range(10 * 60, 22 * 60))));
+        });
+
+        provider.prefetchHours(List.of("p1", "p2", "p3"));
+
+        assertThat(provider.hoursOf("p1")).isNotNull();
+        assertThat(provider.hoursOf("p2")).isNull();
+        assertThat(provider.hoursOf("p3")).isNotNull();
+        assertThat(calls.get()).isEqualTo(3);
+    }
+
+    @Test
+    void 이미_조회한_장소는_미리_조회에서_다시_부르지_않는다() {
+        AtomicInteger calls = new AtomicInteger();
+        SavedPlaceInfoProvider provider = new SavedPlaceInfoProvider(List.of(), placeId -> {
+            calls.incrementAndGet();
+            return null;
+        });
+
+        provider.hoursOf("p1");
+        provider.prefetchHours(List.of("p1", "p2", "p3"));
+
+        assertThat(calls.get()).isEqualTo(3);
     }
 
     private static SavedPlaceInfoProvider provider(AtomicInteger calls, Hours hours) {

@@ -23,11 +23,17 @@ public record PlanGenerationInput(String city, int dayCount, Companion companion
     /**
      * @param number   1부터 시작하는 장소 번호. 모델은 이 번호로만 답한다.
      * @param category 장소 유형. 보강 전이거나 매칭에 실패한 장소는 비어 있어서 OTHER로 채운다.
+     * @param hours    여행 일차별 영업시간 문장 ({@link HoursText}). 영업시간을 모르면 null
      */
-    public record Candidate(int number, String placeId, String name, PlaceCategory category) {
+    public record Candidate(int number, String placeId, String name, PlaceCategory category, String hours) {
+
+        public Candidate(int number, String placeId, String name, PlaceCategory category) {
+            this(number, placeId, name, category, null);
+        }
 
         public Candidate {
             category = category == null ? PlaceCategory.OTHER : category;
+            hours = hours == null || hours.isBlank() ? null : hours.strip();
         }
     }
 
@@ -49,7 +55,7 @@ public record PlanGenerationInput(String city, int dayCount, Companion companion
         List<Candidate> candidates = new java.util.ArrayList<>();
         for (int i = 0; i < places.size(); i++) {
             PlaceRef place = places.get(i);
-            candidates.add(new Candidate(i + 1, place.placeId(), place.name(), place.category()));
+            candidates.add(new Candidate(i + 1, place.placeId(), place.name(), place.category(), place.hours()));
         }
         return new PlanGenerationInput(city, dayCount, companion, preferences, candidates, List.of());
     }
@@ -59,8 +65,12 @@ public record PlanGenerationInput(String city, int dayCount, Companion companion
         return new PlanGenerationInput(city, dayCount, companion, preferences, places, problems);
     }
 
-    /** 번호를 붙이기 전의 장소. category가 비어 있으면 OTHER로 본다. */
-    public record PlaceRef(String placeId, String name, PlaceCategory category) {
+    /** 번호를 붙이기 전의 장소. category가 비어 있으면 OTHER로 본다. hours는 영업시간을 모르면 null. */
+    public record PlaceRef(String placeId, String name, PlaceCategory category, String hours) {
+
+        public PlaceRef(String placeId, String name, PlaceCategory category) {
+            this(placeId, name, category, null);
+        }
 
         public PlaceRef {
             category = category == null ? PlaceCategory.OTHER : category;

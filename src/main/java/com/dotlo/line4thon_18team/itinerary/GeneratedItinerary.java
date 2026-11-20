@@ -11,14 +11,22 @@ import java.util.List;
  * @param draft            일차별 방문 순서 (itemId는 여기서 새로 만든 값)
  * @param validation       계산된 시각과 문제 목록
  * @param excludedPlaceIds 이번 일정에 넣지 못한 장소 (GEN-PLAN-001-E4 "12곳은 일정에 넣지 못했어요")
- * @param attempts         배치 시도 횟수 (1이면 처음에 바로 통과)
+ * @param closedPlaceIds   여행 기간 내내 영업하지 않아 AI에게 넘기지 않고 뺀 장소. excludedPlaceIds와 겹치지 않는다
+ * @param attempts         배치 시도 횟수 (1이면 처음에 바로 통과, 0이면 AI를 부르지 않음)
  */
 public record GeneratedItinerary(ItineraryDraft draft,
                                  ValidationResult validation,
                                  List<String> excludedPlaceIds,
+                                 List<String> closedPlaceIds,
                                  int attempts) {
+
+    public GeneratedItinerary(ItineraryDraft draft, ValidationResult validation, List<String> excludedPlaceIds,
+                              int attempts) {
+        this(draft, validation, excludedPlaceIds, List.of(), attempts);
+    }
 
     public GeneratedItinerary {
         excludedPlaceIds = excludedPlaceIds == null ? List.of() : List.copyOf(excludedPlaceIds);
+        closedPlaceIds = closedPlaceIds == null ? List.of() : List.copyOf(closedPlaceIds);
     }
 }

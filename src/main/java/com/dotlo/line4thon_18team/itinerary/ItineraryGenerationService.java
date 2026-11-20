@@ -4,11 +4,13 @@ import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.global.llm.StructuredLlmExecutor;
 import com.dotlo.line4thon_18team.itinerary.ItineraryValidationService.ValidationRun;
+import com.dotlo.line4thon_18team.itinerary.ai.HoursText;
 import com.dotlo.line4thon_18team.itinerary.ai.PlanGenerationInput;
 import com.dotlo.line4thon_18team.itinerary.ai.PlanGenerationOutput;
 import com.dotlo.line4thon_18team.itinerary.ai.PlanGenerationTask;
 import com.dotlo.line4thon_18team.itinerary.validation.model.DayDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.model.ItineraryDraft;
+import com.dotlo.line4thon_18team.itinerary.validation.model.OpeningHours;
 import com.dotlo.line4thon_18team.itinerary.validation.model.ValidationOrigin;
 import com.dotlo.line4thon_18team.itinerary.validation.model.VisitDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
@@ -79,7 +81,7 @@ public class ItineraryGenerationService {
         GeneratedItinerary generated = generate(tripId, userId, savedPlaceIds);
         ItineraryVersionView saved = itineraryService.saveAiDraft(tripId, userId,
                 generated.draft(), generated.validation());
-        return new GeneratedItineraryVersion(saved, generated.excludedPlaceIds());
+        return new GeneratedItineraryVersion(saved, generated.excludedPlaceIds(), generated.closedPlaceIds());
     }
 
     /**
@@ -97,7 +99,17 @@ public class ItineraryGenerationService {
     /** @param savedPlaceIds 고른 저장 장소 id. null이면 저장 장소 전체 */
     public GeneratedItinerary generate(long tripId, long userId, Collection<Long> savedPlaceIds) {
         ValidationRun run = validationService.prepare(tripId, userId);
-        PlanGenerationInput input = buildInput(run, selected(run.places(), savedPlaceIds));
+        long hoursStart = System.nanoTime();
+        Candidates candidates = buildCandidates(run, selected(run.places(), savedPlaceIds));
+        log.info("영업시간 조회 tripId={} places={} elapsed={}ms", tripId,
+                candidates.open().size() + candidates.closedPlaceIds().size(), (System.nanoTime() - hoursStart) / 1_000_000);
+        if (candidates.open().isEmpty()) {
+            // 모든 장소가 여행 내내 영업하지 않는다. AI에게 배치할 것이 없어서 부르지 않는다
+            return emptyItinerary(run, candidates.closedPlaceIds());
+        }
+        Trip trip = run.trip();
+        PlanGenerationInput input = PlanGenerationInput.of(trip.getCity(), dayCount(trip), trip.getCompanion(),
+                run.preferences(), candidates.open());
 
         GeneratedItinerary last = null;
         List<String> problems = List.of();
@@ -114,7 +126,8 @@ public class ItineraryGenerationService {
                     (validateEnd - llmEnd) / 1_000_000, (validateEnd - startedAt) / 1_000_000,
                     validation.summary().valid());
 
-            last = new GeneratedItinerary(draft, validation, placeIds(plan.excluded(), input), attempt);
+            last = new GeneratedItinerary(draft, validation, placeIds(plan.excluded(), input),
+                    candidates.closedPlaceIds(), attempt);
             if (validation.summary().valid()) {
                 return last;
             }
@@ -138,19 +151,54 @@ public class ItineraryGenerationService {
         return picked;
     }
 
-    /** 매칭이 끝난 장소만 쓴다. place ID가 없으면 영업시간·이동시간을 조회할 수 없다. */
-    private static PlanGenerationInput buildInput(ValidationRun run, List<SavedPlace> places) {
-        List<PlanGenerationInput.PlaceRef> candidates = places.stream()
+    /** AI에게 넘길 장소(영업시간 포함)와, 여행 내내 영업하지 않아 넘기지 않고 뺀 장소. */
+    private record Candidates(List<PlanGenerationInput.PlaceRef> open, List<String> closedPlaceIds) {
+    }
+
+    /**
+     * 매칭이 끝난 장소만 쓴다. place ID가 없으면 영업시간·이동시간을 조회할 수 없다.
+     * 여행 기간 내내 영업하지 않는 장소는 AI에게 넘기지 않고 따로 돌려준다 (영업시간을 모르는 장소는 넘긴다).
+     */
+    private static Candidates buildCandidates(ValidationRun run, List<SavedPlace> places) {
+        List<SavedPlace> usable = places.stream()
                 .filter(place -> place.getMatchStatus() == PlaceMatchStatus.MATCHED && place.getPlaceId() != null)
-                .map(place -> new PlanGenerationInput.PlaceRef(place.getPlaceId(), place.getName(),
-                        place.getCategory()))
                 .toList();
-        if (candidates.isEmpty()) {
+        if (usable.isEmpty()) {
             throw new BusinessException(ErrorCode.NO_PLACES_TO_PLAN);
         }
+        run.prefetchHours().accept(usable.stream().map(SavedPlace::getPlaceId).toList());   // 장소가 많아도 조회를 동시에
         Trip trip = run.trip();
-        int dayCount = (int) ChronoUnit.DAYS.between(trip.getStartDate(), trip.getEndDate()) + 1;
-        return PlanGenerationInput.of(trip.getCity(), dayCount, trip.getCompanion(), run.preferences(), candidates);
+        int dayCount = dayCount(trip);
+        List<PlanGenerationInput.PlaceRef> open = new ArrayList<>();
+        List<String> closed = new ArrayList<>();
+        for (SavedPlace place : usable) {
+            OpeningHours hours = run.hoursOf().apply(place.getPlaceId());
+            if (HoursText.closedEveryDay(hours, trip.getStartDate(), dayCount)) {
+                if (!closed.contains(place.getPlaceId())) {
+                    closed.add(place.getPlaceId());
+                }
+                continue;
+            }
+            open.add(new PlanGenerationInput.PlaceRef(place.getPlaceId(), place.getName(), place.getCategory(),
+                    HoursText.forTrip(hours, trip.getStartDate(), dayCount)));
+        }
+        return new Candidates(open, closed);
+    }
+
+    /** 방문이 하나도 없는 일정. 모든 날짜를 빈 날로 채운다. */
+    private static GeneratedItinerary emptyItinerary(ValidationRun run, List<String> closedPlaceIds) {
+        Trip trip = run.trip();
+        List<DayDraft> days = new ArrayList<>();
+        for (int i = 0; i < dayCount(trip); i++) {
+            days.add(new DayDraft(trip.getStartDate().plusDays(i), List.of()));
+        }
+        ItineraryDraft draft = new ItineraryDraft(days);
+        ValidationResult validation = run.validate(draft, ValidationOrigin.AI_GENERATED);
+        return new GeneratedItinerary(draft, validation, List.of(), closedPlaceIds, 0);
+    }
+
+    private static int dayCount(Trip trip) {
+        return (int) ChronoUnit.DAYS.between(trip.getStartDate(), trip.getEndDate()) + 1;
     }
 
     /** 장소 번호를 place ID로 되돌리고 itemId를 새로 만든다. */

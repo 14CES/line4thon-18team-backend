@@ -32,10 +32,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * 일정 검증 (GEN-CHECK-001). 방문 순서만 받아서 시각을 계산하고 영업시간·이동시간 문제를 찾는다.
@@ -73,20 +76,39 @@ public class ItineraryValidationService {
     ValidationRun prepare(long tripId, long userId) {
         Trip trip = tripService.findMemberTrip(userId, tripId);
         List<SavedPlace> places = savedPlaceRepository.findAllByTripIdOrderByIdAsc(tripId);
+        SavedPlaceInfoProvider placeInfo = new SavedPlaceInfoProvider(places, openingHours::get);
         ItineraryValidator validator = new ItineraryValidator(
-                new SavedPlaceInfoProvider(places, openingHours::get),
+                placeInfo,
                 new RunScopedTravelTimeProvider(travelTimeProvider),   // 이동시간은 이 요청 안에서만 재사용 (약관상 요청 간 저장 불가)
                 validationPolicy);
         return new ValidationRun(trip, places, validator, tripContext(trip, tripId),
-                preferenceService.profileOrDefault(tripId, userId));
+                preferenceService.profileOrDefault(tripId, userId), placeInfo::hoursOf, placeInfo::prefetchHours);
     }
 
-    /** 검증 한 판에 필요한 것들. 같은 여행을 여러 번 검증해도 조회는 한 번만 한다. */
+    /**
+     * 검증 한 판에 필요한 것들. 같은 여행을 여러 번 검증해도 조회는 한 번만 한다.
+     *
+     * @param hoursOf placeId의 영업시간. AI에게 알려 줄 때와 검증이 같은 조회를 쓴다. 모르면 null
+     * @param prefetchHours 이 placeId들의 영업시간을 미리 동시에 조회해 둔다. AI에게 여러 장소의 영업시간을 알리기 전에 부른다
+     */
     record ValidationRun(Trip trip,
                          List<SavedPlace> places,
                          ItineraryValidator validator,
                          TripContext context,
-                         PreferenceProfile preferences) {
+                         PreferenceProfile preferences,
+                         Function<String, com.dotlo.line4thon_18team.itinerary.validation.model.OpeningHours> hoursOf,
+                         Consumer<Collection<String>> prefetchHours) {
+
+        ValidationRun(Trip trip, List<SavedPlace> places, ItineraryValidator validator, TripContext context,
+                      PreferenceProfile preferences,
+                      Function<String, com.dotlo.line4thon_18team.itinerary.validation.model.OpeningHours> hoursOf) {
+            this(trip, places, validator, context, preferences, hoursOf, placeIds -> { });
+        }
+
+        ValidationRun(Trip trip, List<SavedPlace> places, ItineraryValidator validator, TripContext context,
+                      PreferenceProfile preferences) {
+            this(trip, places, validator, context, preferences, placeId -> null);
+        }
 
         /** @throws BusinessException 일정 입력이 잘못된 경우(400) */
         ValidationResult validate(ItineraryDraft draft, ValidationOrigin origin) {

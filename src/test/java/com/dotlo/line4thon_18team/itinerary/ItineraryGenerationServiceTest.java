@@ -8,6 +8,7 @@ import com.dotlo.line4thon_18team.itinerary.ItineraryValidationService.Validatio
 import com.dotlo.line4thon_18team.itinerary.ai.PlanGenerationTask;
 import com.dotlo.line4thon_18team.itinerary.validation.ItineraryValidator;
 import com.dotlo.line4thon_18team.itinerary.validation.ValidationPolicy;
+import com.dotlo.line4thon_18team.itinerary.validation.model.OpeningHours;
 import com.dotlo.line4thon_18team.itinerary.validation.model.PlaceInfo;
 import com.dotlo.line4thon_18team.itinerary.validation.support.FakePlaceInfoProvider;
 import com.dotlo.line4thon_18team.itinerary.validation.support.FakeTravelTimeProvider;
@@ -25,7 +26,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.DOTONBORI;
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.KUROMON;
@@ -264,7 +267,68 @@ class ItineraryGenerationServiceTest {
         Mockito.verifyNoInteractions(itineraryService);
     }
 
+    @Test
+    void 영업시간을_알면_AI_프롬프트에_붙인다() {
+        givenWithHours(Map.of(DOTONBORI.placeId(), OpeningHours.daily(LocalTime.of(9, 0), LocalTime.of(17, 0))),
+                matched(DOTONBORI));
+        llm.thenReturn("""
+                {"days": [{"dayNumber": 1, "placeNumbers": [1]},
+                          {"dayNumber": 2, "placeNumbers": []},
+                          {"dayNumber": 3, "placeNumbers": []},
+                          {"dayNumber": 4, "placeNumbers": []}],
+                 "excluded": []}
+                """);
+
+        service.generate(1L, 7L);
+
+        assertThat(llm.requests().get(0).messages().toString()).contains("영업: 매일 09:00");
+    }
+
+    @Test
+    void 여행_내내_영업하지_않는_장소는_AI에_넘기지_않고_따로_돌려준다() {
+        givenWithHours(Map.of(KUROMON.placeId(), OpeningHours.weekly(List.of())),
+                matched(DOTONBORI), matched(KUROMON));
+        llm.thenReturn("""
+                {"days": [{"dayNumber": 1, "placeNumbers": [1]},
+                          {"dayNumber": 2, "placeNumbers": []},
+                          {"dayNumber": 3, "placeNumbers": []},
+                          {"dayNumber": 4, "placeNumbers": []}],
+                 "excluded": []}
+                """);
+
+        GeneratedItinerary result = service.generate(1L, 7L);
+
+        assertThat(result.closedPlaceIds()).containsExactly(KUROMON.placeId());
+        assertThat(result.excludedPlaceIds()).isEmpty();
+        String prompt = llm.requests().get(0).messages().toString();
+        assertThat(prompt).contains(DOTONBORI.name()).doesNotContain(KUROMON.name());
+    }
+
+    @Test
+    void 장소가_모두_영업하지_않으면_AI를_부르지_않고_빈_일정을_돌려준다() {
+        givenWithHours(Map.of(DOTONBORI.placeId(), OpeningHours.weekly(List.of()),
+                        KUROMON.placeId(), OpeningHours.weekly(List.of())),
+                matched(DOTONBORI), matched(KUROMON));
+
+        GeneratedItinerary result = service.generate(1L, 7L);
+
+        assertThat(llm.callCount()).isZero();
+        assertThat(result.attempts()).isZero();
+        assertThat(result.closedPlaceIds()).containsExactly(DOTONBORI.placeId(), KUROMON.placeId());
+        assertThat(result.draft().days()).hasSize(4).allMatch(day -> day.visits().isEmpty());
+    }
+
     // ---- helpers ----
+
+    /** 검증은 실제 오사카 장소 정보로, AI에게 알려 줄 영업시간은 hours로 따로 준다. */
+    private void givenWithHours(Map<String, OpeningHours> hours, SavedPlace... places) {
+        FakePlaceInfoProvider provider = OsakaFixtures.places();
+        ItineraryValidator validator = new ItineraryValidator(provider,
+                FakeTravelTimeProvider.fixedMinutes(15), ValidationPolicy.defaults());
+        ValidationRun run = new ValidationRun(trip(), List.of(places), validator,
+                OsakaFixtures.trip(), PreferenceProfile.defaults(), hours::get);
+        Mockito.when(validationService.prepare(1L, 7L)).thenReturn(run);
+    }
 
     private static SavedPlace withId(long id, SavedPlace place) {
         Mockito.when(place.getId()).thenReturn(id);

@@ -17,6 +17,9 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Function;
 
 /**
@@ -29,6 +32,7 @@ import java.util.function.Function;
 class SavedPlaceInfoProvider implements PlaceInfoProvider {
 
     private static final Logger log = LoggerFactory.getLogger(SavedPlaceInfoProvider.class);
+    private static final int PREFETCH_THREADS = 8;
 
     private final Map<String, SavedPlace> byPlaceId;
     private final Function<String, com.dotlo.line4thon_18team.place.OpeningHours.Hours> hoursLookup;
@@ -66,6 +70,33 @@ class SavedPlaceInfoProvider implements PlaceInfoProvider {
             return null;   // 매칭 전이거나 못 찾은 장소
         }
         return new GeoPoint(place.getLatitude(), place.getLongitude());
+    }
+
+    /**
+     * 아직 조회하지 않은 장소의 영업시간을 한꺼번에(동시에) 조회해 기억해 둔다. 장소가 많은 여행에서
+     * 장소마다 순서대로 조회하느라 AI 호출이 늦어지는 것을 줄인다. 기억은 이 메서드를 부른 쪽에서만 채운다.
+     */
+    void prefetchHours(Collection<String> placeIds) {
+        List<String> missing = placeIds.stream().distinct().filter(id -> !hoursCache.containsKey(id)).toList();
+        if (missing.size() < 2) {
+            return;   // 하나뿐이면 hoursOf가 필요할 때 조회한다
+        }
+        ExecutorService pool = Executors.newFixedThreadPool(Math.min(PREFETCH_THREADS, missing.size()));
+        try {
+            List<CompletableFuture<OpeningHours>> lookups = missing.stream()
+                    .map(id -> CompletableFuture.supplyAsync(() -> lookupHours(id), pool))
+                    .toList();
+            for (int i = 0; i < missing.size(); i++) {
+                hoursCache.put(missing.get(i), lookups.get(i).join());
+            }
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    /** 영업시간을 모르면 null. findPlaces와 같은 기억을 써서 같은 장소를 두 번 조회하지 않는다. */
+    OpeningHours hoursOf(String placeId) {
+        return openingHours(placeId);
     }
 
     private OpeningHours openingHours(String placeId) {

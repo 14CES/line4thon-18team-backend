@@ -49,6 +49,9 @@ public class PlanGenerationTask implements LlmTask<PlanGenerationInput, PlanGene
             12. 동행 유형을 배치에 참고한다. 혼자면 동선을 짧게 잡고, 연인이면 분위기 있는 곳을 저녁에 두고,
                 친구면 체험·쇼핑을 고르게 섞고, 가족이면 같은 날 장소 사이 거리를 더 좁힌다.
                 하루에 넣는 개수는 규칙 4를 그대로 따르고, 취향과 어긋나면 취향을 먼저 따른다.
+            13. 장소 뒤에 '영업:'이 있으면 그 영업시간을 지킨다. 휴무인 날에는 그 장소를 넣지 않는다.
+                일찍 닫는 장소는 그날 앞쪽에, 늦게 여는 장소(야경·밤 등)는 그날 뒤쪽에 둔다.
+                '영업:'이 없는 장소는 영업시간을 모르는 것이니 제한 없이 배치한다.
             """;
 
     private final JsonNode schema;
@@ -102,7 +105,11 @@ public class PlanGenerationTask implements LlmTask<PlanGenerationInput, PlanGene
         prompt.append("\n저장한 장소 ").append(input.places().size()).append("곳\n");
         for (Candidate place : input.places()) {
             prompt.append(place.number()).append(". ").append(sanitize(place.name()))
-                    .append(" (").append(place.category().label()).append(")\n");
+                    .append(" (").append(place.category().label()).append(')');
+            if (place.hours() != null) {
+                prompt.append(" 영업: ").append(place.hours());
+            }
+            prompt.append('\n');
         }
         if (!input.previousProblems().isEmpty()) {
             prompt.append("\n지난번 배치에서 아래 문제가 있었습니다. 피해서 다시 배치해 주세요.\n");

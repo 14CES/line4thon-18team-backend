@@ -53,6 +53,10 @@ public class PlanEditTask implements LlmTask<PlanEditInput, PlanEditOutput> {
             12. reason에는 무엇을 어떻게 고쳤는지 한두 문장으로 쓴다. 사용자가 그대로 읽는 문장이니 존댓말로 쓰고,
                 itemId나 장소 번호 같은 내부 값 대신 장소 이름을 쓴다. 규칙 8처럼 일정을 그대로 둔 경우에는
                 무엇을 못 했고 왜 그런지 쓴다.
+            13. 장소 뒤에 '영업:'이 있으면, 그 장소를 옮기거나 새로 넣을 때 영업시간과 휴무일을 지킨다.
+                요청과 무관한 방문은 규칙 5대로 건드리지 않는다. 여행 기간 내내 휴무인 장소를 넣어 달라는 요청은
+                규칙 8처럼 일정을 그대로 두고 reason에 영업하지 않아 넣지 못했다고 쓴다.
+                '영업:'이 없는 장소는 영업시간을 모르는 것이니 제한 없이 본다.
             """;
 
     private final JsonNode schema;
@@ -106,7 +110,11 @@ public class PlanEditTask implements LlmTask<PlanEditInput, PlanEditOutput> {
             }
             for (CurrentVisit visit : day.visits()) {
                 prompt.append("  ").append(visit.itemId()).append(" ").append(sanitize(visit.name()))
-                        .append(" (").append(visit.category().label()).append(")\n");
+                        .append(" (").append(visit.category().label()).append(')');
+                if (visit.hours() != null) {
+                    prompt.append(" 영업: ").append(visit.hours());
+                }
+                prompt.append('\n');
             }
         }
 
@@ -116,7 +124,11 @@ public class PlanEditTask implements LlmTask<PlanEditInput, PlanEditOutput> {
         } else {
             for (Candidate place : input.addable()) {
                 prompt.append(place.number()).append(". ").append(sanitize(place.name()))
-                        .append(" (").append(place.category().label()).append(")\n");
+                        .append(" (").append(place.category().label()).append(')');
+                if (place.hours() != null) {
+                    prompt.append(" 영업: ").append(place.hours());
+                }
+                prompt.append('\n');
             }
         }
 
