@@ -53,6 +53,9 @@ public final class OsakaFixtures {
     public static final PlaceInfo CAFE_CLOSED_MONDAY = new PlaceInfo("p-cafe", "카페 (월 휴무)",
             new GeoPoint(34.6700, 135.5000), PlaceCategory.CAFE,
             OpeningHours.dailyExcept(LocalTime.of(11, 0), LocalTime.of(19, 0), Set.of(DayOfWeek.MONDAY)));
+    /** 여행 내내 휴무 (서버가 옮겨도 풀리지 않는 문제용) */
+    public static final PlaceInfo CAFE_CLOSED_EVERY_DAY = new PlaceInfo("p-cafe-closed", "카페 (늘 휴무)",
+            new GeoPoint(34.6701, 135.5001), PlaceCategory.CAFE, OpeningHours.weekly(List.of()));
     /** 18:00~다음 날 02:00 */
     public static final PlaceInfo NIGHT_BAR = new PlaceInfo("p-bar", "신세카이 바",
             new GeoPoint(34.6525, 135.5063), PlaceCategory.NIGHTLIFE,
@@ -101,6 +104,6 @@ public final class OsakaFixtures {
 
     public static FakePlaceInfoProvider places() {
         return new FakePlaceInfoProvider(List.of(DOTONBORI, OSAKA_CASTLE, KUROMON, UMEDA_SKY, CAFE_CLOSED_MONDAY,
-                NIGHT_BAR, SHRINE_NO_HOURS, RESTAURANT_NO_LOCATION, PARK_800M));
+                CAFE_CLOSED_EVERY_DAY, NIGHT_BAR, SHRINE_NO_HOURS, RESTAURANT_NO_LOCATION, PARK_800M));
     }
 }
